@@ -1,4 +1,5 @@
 # WSL 状态管理器
+<img width="1645" height="1118" alt="image" src="https://github.com/user-attachments/assets/827eec9f-58f5-4e3d-94e4-644776694c21" />
 
 用 **VB.NET + WPF** 写的 WSL 发行版开关机小工具，Windows 11 Fluent 风格界面（Mica 背景、圆角卡片、明暗主题、系统托盘）。
 
@@ -56,7 +57,7 @@ WslManager.exe --tray                :: 后台常驻（只显示托盘图标，�
 
 `app\WslManager.exe`（单文件，约 256 KB）双击即可运行。
 
-依赖：Windows 10/11 + [.NET 8 桌面运行时](https://dotnet.microsoft.com/download/dotnet/8.0)（本机已装 8.0.8）。
+依赖：Windows 10/11 + [.NET 8 桌面运行时](https://dotnet.microsoft.com/download/dotnet/8.0)
 
 ## 重新编译
 
@@ -66,39 +67,6 @@ dotnet publish -c Release -p:RuntimeIdentifier=win-x64 -p:SelfContained=false -p
 
 图标由 `tools\gen_icon.py` 生成（`python tools\gen_icon.py Assets\app.ico`）。
 
-## 实现要点（踩过的坑）
-
-1. **`wsl.exe` 传参必须用 `ProcessStartInfo.ArgumentList`**。
-   用 `Arguments` 字符串（哪怕正确加了引号）启动发行版会稳定返回退出码 `-1`，改用 `ArgumentList` 逐项添加后正常返回 `0`。
-2. **必须重定向 stdin 且不能关闭**。GUI 进程没有可用 stdin；若把 `StandardInput` 关掉，子进程读到 broken pipe，启动同样失败为 `-1`。
-3. **`wsl -l -v` 输出是 UTF-16LE 且不带 BOM**。按 `bytes[1]==0 && bytes[3]==0` 判定后按 Unicode 解码；其他命令（如 `hostname -I`）是 UTF-8，需分别处理。
-4. **WSL2 空闲会自动停机**。只执行 `wsl -d X true` 后状态会短暂变 Running 再自动 Stopped，因此额外挂一个 `sleep 8640000` 的后台保活进程，才能真正保持开机。
-5. **XAML 中已勾选的 CheckBox，代码里赋同样的值不会触发 `Checked` 事件**，自动刷新定时器必须显式启动，否则永远不生效。
-6. **软关机必须用 `-u root`**。以默认用户执行 `shutdown -h now` 会被 polkit 拦下：
-   `Call to PowerOff failed: Interactive authentication required.`，命令返回 `rc=1` 且什么都不做。
-   这个坑很隐蔽——表面上看发行版"过一会儿确实停了"，其实那是 WSL 空闲自动停机，不是被 shutdown 关掉的。
-   挂一个保活进程做对照实验才能分辨。
-7. **软关机命令超时不能 Kill 进程**。`wsl.exe` 会一直挂到发行版真正停止，`Kill(True)` 会连 WSL 会话一起杀掉，
-   导致关机流程中断。应超时放弃等待、让它在后台跑完，用状态轮询判断结果。
-8. **对已停止的发行版不要执行 `wsl -d X ...`**。wsl 会为了运行这条命令把发行版先拉起来，
-   "关机"反而变成"开机"。执行前必须先查状态。
-9. **WPF 里不能靠 DWM 材质做窗口背景**。WPF 客户区是不透明渲染的，`DWMWA_SYSTEMBACKDROP_TYPE`(Mica)
-   申请成功也透不出来；若再把根容器背景设成 `Transparent`，窗口会直接变成纯黑——
-   深色主题下不明显，浅色主题下非常刺眼。正确做法是背景自绘（本项目用 `MicaBrush` 渐变模拟云母层次），
-   DWM 只用来做圆角和沉浸式深色。
-10. VB 注意点：`on` 是保留字不能作变量名；`ObservableCollection.Count(predicate)` 需写成 `AsEnumerable().Count(...)`；
-    对象初始化器里不能写注释；`OnPropertyChanged` 与 `FrameworkElement` 基类方法冲突需改名；
-    `Async Function` 的返回类型必须是 `Task` / `Task(Of T)`。
-11. **重启按钮在卡片内被裁切**。操作区三个按钮总宽超出卡片左侧内容列可用宽度，最右侧按钮显示不全。
-    根因：卡片宽 404 + 内边距 + 右侧图标列挤占，左侧操作列仅约 250px，而三个 84px 按钮（268px）放不下。
-    修法：卡片 404→420、按钮 84→78、按钮间距 8→6、操作区左缩进 26→18，共腾出约 16px；
-    修复后三个 78px 按钮 + 6px 间距 = 246px ≤ 可用约 266px，全部完整显示。
-12. **打开终端报「UNC 路径不受支持」**。原 `wt.exe -d "\\wsl$\X"` 把 UNC 作为起始目录传给 Windows Terminal，
-    CMD profile 启动时落到 UNC 工作目录，弹"UNC 路径不受支持，默认值设为 Windows 目录"。
-    改法：不直接用 UNC 作起始目录，改为 `wt.exe wsl.exe -d "X"`，由发行版自己决定工作目录（通常落在用户家目录）。
-13. **卡片布局改为单列自适应**。原 `ItemsPanel` 是 `WrapPanel`（卡片固定 `Width=420`，多列平铺）。
-    改成 `StackPanel Orientation=Vertical`，卡片 `HorizontalAlignment=Stretch` 去掉固定宽度 → 一行一个、随窗口宽度拉伸；
-    另加 `MaxWidth=900`（超过后居中）避免超宽屏上按钮被拉得过散。`ScrollViewer.HorizontalContentAlignment=Center` 配合居中。
 
 ## 目录结构
 
