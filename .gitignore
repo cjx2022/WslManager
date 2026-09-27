@@ -8,9 +8,13 @@ obj/
 # Published single-file artifacts (delivered via GitHub Releases, not committed)
 app/
 app-selfcontained/
+publish/
 
 # Local release-asset staging (uploaded to GitHub Releases, not committed)
 release/
+
+# Logs
+*.log
 
 # OS / editor noise
 Thumbs.db

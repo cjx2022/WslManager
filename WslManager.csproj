@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>WslManager</AssemblyName>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Company>BillChen</Company>
+    <Product>WSL Manager</Product>
+  </PropertyGroup>
+  <ItemGroup>
+    <ApplicationDefinition Remove="WslManager.WslManager\App.xaml" />
+    <ApplicationDefinition Include="WslManager.WslManager\App.xaml" Generator="MSBuild:Compile" SubType="Designer" LogicalName="app.xaml" />
+    <Page Remove="themes\controls.xaml" />
+    <Page Remove="themes\dark.xaml" />
+    <Page Remove="themes\light.xaml" />
+    <Page Remove="WslManager.WslManager\MainWindow.xaml" />
+    <Page Remove="WslManager.WslManager\InstallWindow.xaml" />
+    <Page Remove="WslManager.WslManager\UninstallWindow.xaml" />
+    <Page Remove="WslManager.WslManager\EnvCheckWindow.xaml" />
+    <Page Remove="WslManager.WslManager\DownloadsWindow.xaml" />
+    <Page Include="themes\controls.xaml" Generator="MSBuild:Compile" SubType="Designer" LogicalName="themes/controls.xaml" />
+    <Page Include="themes\dark.xaml" Generator="MSBuild:Compile" SubType="Designer" LogicalName="themes/dark.xaml" />
+    <Page Include="themes\light.xaml" Generator="MSBuild:Compile" SubType="Designer" LogicalName="themes/light.xaml" />
+    <Page Include="WslManager.WslManager\MainWindow.xaml" Generator="MSBuild:Compile" SubType="Designer" LogicalName="mainwindow.xaml" />
+    <Page Include="WslManager.WslManager\InstallWindow.xaml" Generator="MSBuild:Compile" SubType="Designer" LogicalName="installwindow.xaml" />
+    <Page Include="WslManager.WslManager\UninstallWindow.xaml" Generator="MSBuild:Compile" SubType="Designer" LogicalName="uninstallwindow.xaml" />
+    <Page Include="WslManager.WslManager\EnvCheckWindow.xaml" Generator="MSBuild:Compile" SubType="Designer" LogicalName="envcheckwindow.xaml" />
+    <Page Include="WslManager.WslManager\DownloadsWindow.xaml" Generator="MSBuild:Compile" SubType="Designer" LogicalName="downloadswindow.xaml" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+  </ItemGroup>
+</Project>

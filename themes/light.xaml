@@ -1,0 +1,33 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Color x:Key="ShadowColor">#FF000000</Color>
+  <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F7F7F8" />
+  <SolidColorBrush x:Key="WindowBorderBrush" Color="#DCDCDC" />
+  <LinearGradientBrush x:Key="MicaBrush" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#FDFDFE" Offset="0" />
+    <GradientStop Color="#F4F5F7" Offset="0.55" />
+    <GradientStop Color="#EFF0F3" Offset="1" />
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="CardBrush" Color="#FFFFFF" />
+  <SolidColorBrush x:Key="CardBorderBrush" Color="#E6E6E6" />
+  <SolidColorBrush x:Key="MenuBrush" Color="#FAFAFA" />
+  <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1B1B1F" />
+  <SolidColorBrush x:Key="TextSecondaryBrush" Color="#616166" />
+  <SolidColorBrush x:Key="TextTertiaryBrush" Color="#8E8E93" />
+  <SolidColorBrush x:Key="AccentBrush" Color="#0078D4" />
+  <SolidColorBrush x:Key="AccentHoverBrush" Color="#1A86DE" />
+  <SolidColorBrush x:Key="SubtleBrush" Color="#FBFBFB" />
+  <SolidColorBrush x:Key="SubtleHoverBrush" Color="#F0F0F0" />
+  <SolidColorBrush x:Key="SubtlePressedBrush" Color="#E6E6E6" />
+  <SolidColorBrush x:Key="ControlBorderBrush" Color="#E0E0E0" />
+  <SolidColorBrush x:Key="ToggleTrackOffBrush" Color="#F0F0F0" />
+  <SolidColorBrush x:Key="SuccessBrush" Color="#0F7B0F" />
+  <SolidColorBrush x:Key="NeutralBrush" Color="#9A9A9A" />
+  <SolidColorBrush x:Key="DangerBrush" Color="#C42B1C" />
+  <SolidColorBrush x:Key="WarningBrush" Color="#B8860B" />
+  <SolidColorBrush x:Key="SeparatorBrush" Color="#EBEBEB" />
+  <SolidColorBrush x:Key="StatusBarBrush" Color="#F0F0F0" />
+  <SolidColorBrush x:Key="ScrollThumbBrush" Color="#C6C6C6" />
+  <SolidColorBrush x:Key="ScrollThumbHoverBrush" Color="#A0A0A0" />
+  <SolidColorBrush x:Key="AccentSoftBrush" Color="#E8F3FD" />
+</ResourceDictionary>
