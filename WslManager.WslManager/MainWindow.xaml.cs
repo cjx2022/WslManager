@@ -846,7 +846,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IComponentConn
 	private void About_Click(object sender, RoutedEventArgs e)
 	{
 		System.Windows.MessageBox.Show(this,
-			"WSL Manager 1.0\n\n开发者：BillChen\n© 2026 BillChen 版权所有\n\n本软件为个人开发作品，仅供学习与个人使用；软件按现状提供，作者不对使用本软件产生的任何损失承担责任。WSL、Windows 等名称归其各自所有者所有。",
+			"WSL Manager 1.1\n\n开发者：BillChen\n© 2026 BillChen 版权所有\n\n本软件为个人开发作品，仅供学习与个人使用；软件按现状提供，作者不对使用本软件产生的任何损失承担责任。WSL、Windows 等名称归其各自所有者所有。",
 			"关于 WSL Manager",
 			MessageBoxButton.OK,
 			MessageBoxImage.Information);

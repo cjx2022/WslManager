@@ -21,6 +21,7 @@
 | **安装发行版**（1.0 新增） | 两级选择：官方在线列表（22 个）∪ 镜像目录特供；官方下载源与国内镜像（清华 TUNA / 阿里云 / USTC / 华为云）分组显示，**测速择优**、缓存下载、实时进度与速度、任务可随时终止 |
 | **卸载发行版**（1.0 新增） | 导出备份后，勾选知晓并输入完全一致的发行版名称确认，再执行卸载 |
 | **环境检查**（1.0 新增） | 9 项检查：Windows 版本、WSL 组件、WSL 状态、系统服务、Windows 功能、CPU 虚拟化、磁盘空间、管理员权限、网络连通性，每项附官方文档链接 |
+| **一键修复 / 单项修复**（1.1 新增） | 未通过的项目若可自动处理，行内直接出现「修复」按钮；标题栏「一键修复（N）」按顺序批量处理全部可修复项，修完自动复查并高亮结果。不支持自动修复的项（CPU 虚拟化、磁盘空间、网络）保留文档入口手动处理 |
 | **下载管理**（1.0 新增） | 查看 / 打开 / 删除本地已缓存的安装包 |
 | 打开终端 | 优先 Windows Terminal，未安装则回退 conhost |
 | 打开文件 | 资源管理器打开 `\\wsl$\<发行版>` |
@@ -96,10 +97,15 @@ WslManager.exe --tray                :: 后台常驻（只显示托盘图标，�
 需要 [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)：
 
 ```
-dotnet publish WslManager.csproj -c Release -r win-x64 --self-contained false /p:PublishSingleFile=true -o publish
+dotnet publish WslManager.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:PublishSelfContained=false -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 ```
 
-发布产物为 `publish\WslManager.exe`。图标为仓库根目录 `app.ico`。
+发布产物为 `publish\WslManager.exe`（框架依赖单文件，约 0.8 MB）。图标为仓库根目录 `app.ico`。
+
+> **注意**：`--self-contained false` 在 .NET 10 SDK 上会被 `PublishSingleFile` 覆盖（该属性在 `dotnet publish` 期间隐含 `SelfContained=true`），
+> 导致产物体积从 0.8 MB 膨胀到 68 MB。必须改用 `-p:PublishSelfContained=false` 才能得到框架依赖的瘦单文件。
+> 另外本工程启用了 `UseWindowsForms`（托盘图标），无法使用 `PublishTrimmed`（报 NETSDK1175），也无法使用
+> `EnableCompressionInSingleFile`（报 NETSDK1176，压缩仅支持自包含应用）。
 
 ## 目录结构
 
@@ -109,7 +115,7 @@ app.ico                   应用图标
 Properties\               程序集信息（版本 1.0.0.0 · BillChen）
 themes\                   Controls 样式 + Light/Dark 主题字典
 WslManager.WslManager\    应用入口、主窗口、安装/卸载/环境检查/下载管理窗口
-WslManager.Install\       安装相关：镜像源目录、测速下载、安装/导出、环境检查
+WslManager.Install\       安装相关：镜像源目录、测速下载、安装/导出、环境检查、修复服务
 WslManager.Wsl\           wsl.exe 调用封装（列表/开关机/默认/终端）
 WslManager.Helpers\       通用辅助类
 Assets\                   README 截图
@@ -118,6 +124,7 @@ Assets\                   README 截图
 ## 更新记录
 
 - **1.0**（2026-09-28）：C# 全面重写。新增安装发行版（官方源 + 国内镜像测速下载）、卸载（导出备份 + 名称确认）、环境检查、下载管理；界面扁平化与明暗主题细节打磨；修复滚动、列表刷新、UTF-16 输出乱码、下载超时等十余项问题
+- **1.1**（2026-09-29）：环境检查支持修复。新增「一键修复」与逐项「修复」按钮：自动安装/更新 WSL 组件、启动相关系统服务、用 DISM 启用 Windows 功能（自动识别 3010 = 需重启）、提权重启自身；修复后自动复查并展示结果
 - **0.1**（2026-09-03）：VB.NET 状态管理器首版（[`v0.1` 标签](https://github.com/cjx2022/WslManager/tree/v0.1)）
 
 ## About

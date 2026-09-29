@@ -56,14 +56,15 @@ public static class EnvChecker
 		return items;
 	}
 
-	private static CheckItem Make(string name, string detail, CheckStatus status, string url = "", string docName = "")
+	private static CheckItem Make(string name, string detail, CheckStatus status, string url = "", string docName = "", FixKind fix = FixKind.None)
 		=> new CheckItem
 		{
 			Name = name,
 			Detail = detail,
 			Status = status.ToString(),
 			DocUrl = url,
-			DocName = docName
+			DocName = docName,
+			Fix = fix
 		};
 
 	private static Task<CheckItem> CheckWindowsVersionAsync()
@@ -100,7 +101,7 @@ public static class EnvChecker
 			if (r.Code != 0 || string.IsNullOrWhiteSpace(r.Out))
 			{
 				return Make("WSL 组件", "未检测到 WSL（wsl --version 无输出）", CheckStatus.Fail,
-					DocLinks.Install + "#how-to-install-linux-on-windows-with-wsl", "安装 WSL");
+					DocLinks.Install + "#how-to-install-linux-on-windows-with-wsl", "安装 WSL", FixKind.InstallWsl);
 			}
 			var text = Decode(r.Raw);
 			var m = Regex.Match(text, @"WSL\s*(?:version|版本)\s*[:：]?\s*([0-9]+\.[0-9.]+)", RegexOptions.IgnoreCase);
@@ -122,7 +123,7 @@ public static class EnvChecker
 			var text = Decode(r.Raw);
 			if (r.Code != 0 && string.IsNullOrWhiteSpace(text))
 			{
-				return Make("WSL 状态", "wsl --status 无输出（WSL 可能未安装）", CheckStatus.Warn, url, "检查 WSL 状态");
+				return Make("WSL 状态", "wsl --status 无输出（WSL 可能未安装）", CheckStatus.Warn, url, "检查 WSL 状态", FixKind.InstallWsl);
 			}
 			var def = Regex.Match(text, @"(?:默认版本|Default Version)\s*[:：]\s*(\d+)", RegexOptions.IgnoreCase);
 			var ver = def.Success ? def.Groups[1].Value : "未知";
@@ -162,7 +163,10 @@ public static class EnvChecker
 			bool coreOk = found.Any(x => x.StartsWith("WslService=Running") || x.StartsWith("LxssManager=Running"));
 			bool hvOk = found.Any(x => x.StartsWith("vmcompute=Running"));
 			var st = coreOk ? (hvOk ? CheckStatus.Ok : CheckStatus.Warn) : CheckStatus.Fail;
-			return Make("系统服务", string.Join("，", found), st, url, "安装问题排查");
+			var detail = string.Join("，", found);
+			if (st != CheckStatus.Ok)
+				detail += "　→ 需启动未运行的服务（可点右侧「启动服务」）";
+			return Make("系统服务", detail, st, url, "安装问题排查", FixKind.StartService);
 		}
 		catch (Exception ex)
 		{
@@ -178,8 +182,8 @@ public static class EnvChecker
 		// Windows 功能：虚拟机平台 / Hypervisor（需要管理员）
 		if (!IsElevated())
 		{
-			list.Add(Make("Windows 功能", "需要管理员权限才能查询 Windows 功能（当前进程未提权）；请以管理员身份重新运行本程序后点「重新检查」",
-				CheckStatus.Warn, DocLinks.ManualInstall + "#step-3---enable-virtual-machine-feature", "启用虚拟机平台"));
+			list.Add(Make("Windows 功能", "需要管理员权限才能查询 Windows 功能（当前进程未提权）。请点右侧「提权重启」以管理员身份重开本程序，会自动重新检查",
+				CheckStatus.Warn, DocLinks.ManualInstall + "#step-3---enable-virtual-machine-feature", "启用虚拟机平台", FixKind.Elevate));
 		}
 		else
 		{
@@ -198,12 +202,12 @@ public static class EnvChecker
 				var st = IsOn(vm) && IsOn(hl) ? CheckStatus.Ok : (vm == "未知" && hl == "未知" ? CheckStatus.Warn : CheckStatus.Fail);
 				list.Add(Make("Windows 功能",
 					$"VirtualMachinePlatform={vm}，Microsoft-Windows-Subsystem-Linux={hl}",
-					st, DocLinks.ManualInstall + "#step-3---enable-virtual-machine-feature", "启用虚拟机平台"));
+					st, DocLinks.ManualInstall + "#step-3---enable-virtual-machine-feature", "启用虚拟机平台", FixKind.EnableFeature));
 			}
 			catch (Exception ex)
 			{
 				list.Add(Make("Windows 功能", "DISM 查询失败: " + ex.Message, CheckStatus.Warn,
-					DocLinks.ManualInstall + "#step-3---enable-virtual-machine-feature", "启用虚拟机平台"));
+					DocLinks.ManualInstall + "#step-3---enable-virtual-machine-feature", "启用虚拟机平台", FixKind.EnableFeature));
 			}
 		}
 
@@ -247,7 +251,23 @@ public static class EnvChecker
 					|| info.IndexOf("VirtualizationFirmwareEnabled=True", StringComparison.OrdinalIgnoreCase) >= 0
 					? CheckStatus.Ok
 					: CheckStatus.Warn);
-			list.Add(Make("CPU 虚拟化", info, st, url, "启用硬件虚拟化"));
+			// 把原始键值对整理成一句人话，避免出现 "VF=False;HP=" 这种半截输出
+			var cpuDetail = info;
+			if (info.IndexOf("VF=", StringComparison.OrdinalIgnoreCase) >= 0)
+			{
+				var vf = Regex.Match(info, @"VF=(\w*)", RegexOptions.IgnoreCase).Groups[1].Value;
+				var hp = Regex.Match(info, @"HP=(\w*)", RegexOptions.IgnoreCase).Groups[1].Value;
+				bool vfOn = vf.Equals("True", StringComparison.OrdinalIgnoreCase);
+				bool hpOn = hp.Equals("True", StringComparison.OrdinalIgnoreCase);
+				if (hpOn)
+					cpuDetail = "已由 Hypervisor 接管（虚拟化正常可用）";
+				else if (vfOn)
+					cpuDetail = "CPU 已支持虚拟化，固件中已启用";
+				else
+					cpuDetail = "未检测到硬件虚拟化。请在 BIOS/UEFI 中开启 Intel VT-x / AMD-V（虚拟化技术），"
+						+ "或确认未在虚拟机中运行本程序；若已开启仍报此项，可能是被 Hyper-V 或其他虚拟化软件占用。";
+			}
+			list.Add(Make("CPU 虚拟化", cpuDetail, st, url, "启用硬件虚拟化"));
 		}
 		catch (Exception ex)
 		{
@@ -293,8 +313,8 @@ public static class EnvChecker
 		try
 		{
 			bool admin = IsElevated();
-			return Make("管理员权限", admin ? "当前进程已提权" : "当前进程未提权（安装 WSL 需要管理员）",
-				admin ? CheckStatus.Ok : CheckStatus.Warn, url, "手动安装 WSL");
+			return Make("管理员权限", admin ? "当前进程已提权" : "当前进程未提权。安装 WSL、启用 Windows 功能都需要管理员权限（可点右侧「提权重启」）",
+				admin ? CheckStatus.Ok : CheckStatus.Warn, url, "手动安装 WSL", FixKind.Elevate);
 		}
 		catch (Exception ex)
 		{
