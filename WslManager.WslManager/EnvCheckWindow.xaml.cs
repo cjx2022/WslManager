@@ -18,6 +18,17 @@ public class CheckVm : ViewModelBase
 	private string _docUrl = "";
 	private bool _fixing;
 	private string _fixMessage = "";
+	private FixKind _fix = FixKind.None;
+
+	/// <summary>所有由 Status / Fix / IsFixing 派生的计算属性，改动后统一通知。</summary>
+	private void RaiseFixDependents()
+	{
+		OnPropertyChanged(nameof(NeedsFix));
+		OnPropertyChanged(nameof(CanFix));
+		OnPropertyChanged(nameof(FixText));
+		OnPropertyChanged(nameof(FixButtonText));
+		OnPropertyChanged(nameof(FixHint));
+	}
 
 	public string Name
 	{
@@ -41,26 +52,30 @@ public class CheckVm : ViewModelBase
 				OnPropertyChanged(nameof(Glyph));
 				OnPropertyChanged(nameof(StatusText));
 				OnPropertyChanged(nameof(StatusBrush));
-				OnPropertyChanged(nameof(CanFix));
-				OnPropertyChanged(nameof(FixHint));
+				RaiseFixDependents();
 			}
 		}
 	}
 
 	/// <summary>该项目可用的修复动作（来自 CheckItem.Fix）。</summary>
-	public FixKind Fix { get; set; } = FixKind.None;
+	public FixKind Fix
+	{
+		get => _fix;
+		set
+		{
+			if (SetField(ref _fix, value, nameof(Fix)))
+				RaiseFixDependents();
+		}
+	}
 
-	/// <summary>修复进行中的标志（按钮转圈 / 禁用）。</summary>
+	/// <summary>修复进行中的标志（按钮禁用 / 文案变为「修复中…」）。</summary>
 	public bool IsFixing
 	{
 		get => _fixing;
 		set
 		{
 			if (SetField(ref _fixing, value, nameof(IsFixing)))
-			{
-				OnPropertyChanged(nameof(CanFix));
-				OnPropertyChanged(nameof(FixButtonText));
-			}
+				RaiseFixDependents();
 		}
 	}
 
@@ -158,6 +173,16 @@ public partial class EnvCheckWindow : Window
 	private readonly ObservableCollection<CheckVm> _checks = new ObservableCollection<CheckVm>();
 	private string _statusText = "就绪";
 
+	/// <summary>置位后，本进程退出时会拉起管理员实例。见 <see cref="TryRelaunchElevated" />。</summary>
+	internal static bool PendingElevate;
+
+	/// <summary>
+	/// 置位后，主窗口的"关闭 → 最小化到托盘"拦截会被放行，允许进程真正退出。
+	/// 提权重启时必须置位，否则主窗口会把「关闭」拦下来（见 MainWindow_Closing），
+	/// Application.Shutdown 落不了地，新实例也永远等不到互斥量释放。
+	/// </summary>
+	internal static bool IsElevateShutdown;
+
 	public string StatusText
 	{
 		get => _statusText;
@@ -204,7 +229,8 @@ public partial class EnvCheckWindow : Window
 			}
 			var fail = items.Count(i => i.Status == "Fail");
 			var warn = items.Count(i => i.Status == "Warn");
-			var fixable = items.Count(i => i.CanFix);
+			// 一键修复只处理"真正能自动改环境"的项，不含「提权重启」（换身份重开，得单独点）。
+			var fixable = items.Count(i => i.CanFix && i.Fix != FixKind.Elevate);
 			StatusText = fail == 0
 				? $"环境检查完成：{items.Count - warn - fail} 项通过，{warn} 项注意"
 				: $"环境检查发现 {fail} 项未通过，{warn} 项注意"
@@ -242,7 +268,7 @@ public partial class EnvCheckWindow : Window
 	/// <summary>一键修复：按顺序修复所有可修复项。</summary>
 	private async void FixAll_Click(object sender, RoutedEventArgs e)
 	{
-		var targets = _checks.Where(c => c.CanFix).ToList();
+		var targets = _checks.Where(c => c.CanFix && c.Fix != FixKind.Elevate).ToList();
 		if (targets.Count == 0)
 		{
 			StatusText = "没有可自动修复的项目。";
@@ -305,20 +331,17 @@ public partial class EnvCheckWindow : Window
 		// 提权重启：不是修复动作，而是换个身份重开自己
 		if (vm.Fix == FixKind.Elevate)
 		{
-			if (TryRelaunchElevated())
-			{
-				StatusText = "已请求以管理员身份重新启动，本窗口即将关闭…";
-				SimpleLog.Write("用户触发提权重启");
-				await Task.Delay(600);
-				Application.Current?.Shutdown();
-			}
-			else
-			{
-				MessageBox.Show(this,
-					"提权启动失败或被取消。\n\n你也可以关闭本程序，手动右键 →「以管理员身份运行」。",
-					"提权失败", MessageBoxButton.OK, MessageBoxImage.Warning);
-			}
-			return new FixResult { Success = false, Message = "已请求提权" };
+			StatusText = "正在以管理员身份重新启动…";
+			SimpleLog.Write("用户触发提权重启");
+
+			// 关键：先让本进程退出，再拉起提权实例。
+			// 直接 Start 会与本进程持有的单实例互斥量冲突，新进程会判定"已在运行"后自杀。
+			// 做法是把"启动提权进程"推迟到进程退出时执行（见 App.OnExit → TryRelaunchElevated）。
+			PendingElevate = true;
+			// 放行主窗口的"关闭 → 最小化到托盘"拦截，否则 Shutdown 会被 Cancel 掉。
+			IsElevateShutdown = true;
+			Application.Current?.Shutdown();
+			return new FixResult { Success = false, Message = "正在提权重启" };
 		}
 
 		vm.IsFixing = true;
@@ -368,34 +391,45 @@ public partial class EnvCheckWindow : Window
 		return result;
 	}
 
-	/// <summary>以管理员身份重新启动当前程序。</summary>
-	private bool TryRelaunchElevated()
+	/// <summary>
+	/// 以管理员身份重新启动当前程序。<b>必须在应用退出流程中调用</b>——
+	/// 本进程仍持有单实例互斥量时直接启动新进程，会被新进程判定为"已在运行"而自杀。
+	/// </summary>
+	internal static void TryRelaunchElevated()
 	{
 		try
 		{
 			var exe = Environment.ProcessPath;
 			if (string.IsNullOrEmpty(exe))
-				return false;
+			{
+				SimpleLog.Write("提权失败：拿不到自身 exe 路径");
+				return;
+			}
 
 			var psi = new System.Diagnostics.ProcessStartInfo
 			{
 				FileName = exe,
+				// 告诉新实例：你是提权重启来的，不要抢单实例锁（旧进程可能还没释放）
+				Arguments = "--elevated",
 				UseShellExecute = true,
 				Verb = "runas",
 				WorkingDirectory = AppContext.BaseDirectory
 			};
 			System.Diagnostics.Process.Start(psi);
-			return true;
+			SimpleLog.Write("已拉起管理员实例：" + exe + " --elevated");
 		}
-		catch (System.ComponentModel.Win32Exception)
+		catch (System.ComponentModel.Win32Exception ex)
 		{
-			// 用户在 UAC 弹窗点了「否」
-			return false;
+			// 最常见：用户在 UAC 弹窗点了「否」(ERROR_CANCELLED = 1223)
+			SimpleLog.Write("提权被取消或失败：" + ex.Message);
+			MessageBox.Show(
+				"提权启动失败或被取消。\n\n你也可以关闭本程序，右键 →「以管理员身份运行」。",
+				"提权失败", MessageBoxButton.OK, MessageBoxImage.Warning);
 		}
 		catch (Exception ex)
 		{
 			SimpleLog.Write("提权失败：" + ex.Message);
-			return false;
+			MessageBox.Show("提权失败：" + ex.Message, "提权失败", MessageBoxButton.OK, MessageBoxImage.Warning);
 		}
 	}
 

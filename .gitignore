@@ -20,3 +20,11 @@ release/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# 构建/发布临时日志与验证脚本
+_b*.log
+_b*.exit
+_p*.log
+_p*.exit
+_verify/
+verify_elevate.ps1

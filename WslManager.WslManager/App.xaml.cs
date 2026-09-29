@@ -65,18 +65,23 @@ public partial class App : Application
 		};
 		string[] array = Environment.GetCommandLineArgs().Skip(1).ToArray();
 		SimpleLog.Write("启动参数：" + ((array.Length == 0) ? "(无)" : string.Join(" ", array)));
-		if (array.Length > 0 && !IsResidentMode(array))
+		if (array.Length > 0 && !IsResidentMode(array) && !IsElevatedRelaunch(array))
 		{
 			RunCommandAsync(array);
 			return;
 		}
 		bool createdNew = false;
-		_mutex = new Mutex(initiallyOwned: true, "Global\\WslManager.SingleInstance.V2.9A3D", out createdNew);
-		if (!createdNew)
+		// --elevated：由旧实例提权重启而来，旧实例已在退出流程中（可能还没释放互斥量），
+		// 此时不抢单实例锁，否则会被自己的旧进程判定为"已在运行"而直接退出。
+		if (!IsElevatedRelaunch(array))
 		{
-			MessageBox.Show("WSL 状态管理器 v2 已经在运行了。", "WSL 状态管理器", (MessageBoxButton)0, (MessageBoxImage)64);
-			((Application)this).Shutdown();
-			return;
+			_mutex = new Mutex(initiallyOwned: true, "Global\\WslManager.SingleInstance.V2.9A3D", out createdNew);
+			if (!createdNew)
+			{
+				MessageBox.Show("WSL 状态管理器已经在运行了。", "WSL 状态管理器", (MessageBoxButton)0, (MessageBoxImage)64);
+				((Application)this).Shutdown();
+				return;
+			}
 		}
 		ThemeMode = AppSettings.GetValue("Theme", "Auto");
 		if (Operators.CompareString(ThemeMode, "Light", TextCompare: false) != 0 && Operators.CompareString(ThemeMode, "Dark", TextCompare: false) != 0)
@@ -102,6 +107,52 @@ public partial class App : Application
 			return Operators.CompareString(args[0], "-b", TextCompare: false) == 0;
 		}
 		return true;
+	}
+
+	/// <summary>是否为「旧实例提权重启」拉起来的新进程。</summary>
+	private static bool IsElevatedRelaunch(string[] args)
+		=> args.Length > 0 && Operators.CompareString(args[0], "--elevated", TextCompare: false) == 0;
+
+	protected override void OnExit(ExitEventArgs e)
+	{
+		// 先释放单实例互斥量，确保即将拉起的提权实例不会撞上"已在运行"。
+		try
+		{
+			if (_mutex != null)
+			{
+				try
+				{
+					_mutex.ReleaseMutex();
+				}
+				catch (ApplicationException)
+				{
+					// 本线程不持有该互斥量（或已被释放），忽略
+				}
+				_mutex.Dispose();
+				_mutex = null;
+			}
+		}
+		catch (Exception ex)
+		{
+			try
+			{
+				SimpleLog.Write("释放单实例互斥量失败：" + ex.Message);
+			}
+			catch
+			{
+			}
+		}
+
+		// 用户点了「提权重启」：现在才拉起管理员实例，避免与上面的互斥量冲突。
+		if (EnvCheckWindow.PendingElevate)
+		{
+			EnvCheckWindow.PendingElevate = false;
+			EnvCheckWindow.TryRelaunchElevated();
+		}
+		// 本次退出就是为提权重启服务的，清掉标志，避免影响后续同进程内的其他退出流程。
+		EnvCheckWindow.IsElevateShutdown = false;
+
+		base.OnExit(e);
 	}
 
 	private async void RunCommandAsync(string[] args)

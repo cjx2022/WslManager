@@ -316,7 +316,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IComponentConn
 				_tray = null;
 			}
 		}
-		else
+		else if (!EnvCheckWindow.IsElevateShutdown)
 		{
 			e.Cancel = true;
 			((Window)this).Hide();

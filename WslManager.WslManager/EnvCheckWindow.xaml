@@ -45,7 +45,7 @@
             <StackPanel VerticalAlignment="Top">
               <TextBlock Text="环境检查" Style="{StaticResource SectionTitle}" />
               <TextBlock Style="{StaticResource Sec}" FontSize="12" TextWrapping="Wrap" MaxWidth="380" HorizontalAlignment="Left"
-                         Text="逐项检测本机是否满足 WSL 安装/运行条件。未通过的项目可直接点「修复」；带 ✦ 的项支持一键批量修复。" />
+                         Text="逐项检测本机是否满足 WSL 安装/运行条件。" />
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
               <Button Name="FixAllButton" Style="{StaticResource AccentButton}" Margin="0,0,8,0" Click="FixAll_Click" Content="一键修复" />
@@ -90,7 +90,7 @@
                           Tag="{Binding}" Click="FixItem_Click"
                           Content="{Binding FixButtonText}"
                           IsEnabled="{Binding CanFix}"
-                          Visibility="{Binding NeedsFix, Converter={StaticResource BoolVis}}" />
+                          Visibility="{Binding CanFix, Converter={StaticResource BoolVis}}" />
                   <Button Grid.Column="4" Style="{StaticResource ActionButton}" Margin="8,0,0,0" Padding="8,3"
                           VerticalAlignment="Top" MinHeight="30" IsEnabled="{Binding HasDoc}" Tag="{Binding DocUrl}" Click="DocLink_Click">
                     <TextBlock Text="文档" FontSize="11.5" />
