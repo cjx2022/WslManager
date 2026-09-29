@@ -1,6 +1,6 @@
 # WSL 管理器
 
-**版本 1.0 · 开发者 BillChen · MIT License**
+**版本 1.1 · 开发者 BillChen · MIT License**
 
 ![界面截图](Assets/screenshot.png)
 
@@ -88,7 +88,7 @@ WslManager.exe --tray                :: 后台常驻（只显示托盘图标，�
 
 ## 运行
 
-在 [Releases](https://github.com/cjx2022/WslManager/releases) 下载 `WslManager.exe`（单文件，约 780 KB）双击即可运行。
+在 [Releases](https://github.com/cjx2022/WslManager/releases) 下载 `WslManager.exe`（单文件，约 0.8 MB）双击即可运行。
 
 依赖：Windows 10/11 + [.NET 8 桌面运行时](https://dotnet.microsoft.com/download/dotnet/8.0)
 
