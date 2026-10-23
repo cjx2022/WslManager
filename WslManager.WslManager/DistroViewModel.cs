@@ -125,6 +125,71 @@ public class DistroViewModel : ViewModelBase
 		}
 	}
 
+	private string _usageCpu = "";
+	private string _usageMem = "";
+	private string _usageTip = "";
+
+	/// <summary>
+	/// 卡片正中的利用率（v2.4 加、v2.5 修）：上行「CPU 12%」、下行「内存 9%」。
+	/// 数据来自 WslStat 在发行版内读 /proc —— 旧实现读 Vmmem 进程的 TotalProcessorTime
+	/// 会被系统拒绝（AccessDenied），整段静默失败，界面上一片空白。
+	/// ⚠ 所有发行版共享同一台虚拟机，这是虚拟机级读数；已停止的发行版为空。
+	/// </summary>
+	public string UsageCpu
+	{
+		get { return _usageCpu; }
+		set { SetField(ref _usageCpu, value, "UsageCpu"); }
+	}
+
+	public string UsageMem
+	{
+		get { return _usageMem; }
+		set { SetField(ref _usageMem, value, "UsageMem"); }
+	}
+
+	// ── 只有百分比数字变色（v2.5.1）──
+	// 界面把一行拆成「标签 + 数值」两个 TextBlock：标签（CPU / 内存）固定用次要色，
+	// 数值（9% / —）按档位换色。这里只放数值那一段，标签写死在 XAML 里。
+	private string _usageCpuValue = "";
+	private string _usageMemValue = "";
+
+	public string UsageCpuValue
+	{
+		get { return _usageCpuValue; }
+		set { SetField(ref _usageCpuValue, value, "UsageCpuValue"); }
+	}
+
+	public string UsageMemValue
+	{
+		get { return _usageMemValue; }
+		set { SetField(ref _usageMemValue, value, "UsageMemValue"); }
+	}
+
+	public string UsageTip
+	{
+		get { return _usageTip; }
+		set { SetField(ref _usageTip, value, "UsageTip"); }
+	}
+
+	// ── 颜色档位（v2.5.1）──
+	// "ok" / "warn" / "danger" / ""（无读数）。
+	// 只存档位、不存 Brush：颜色由 XAML 的 DataTrigger 取 DynamicResource，
+	// 切浅/深色主题时能立刻跟着换（Brush 存进 ViewModel 就会卡在旧主题色上）。
+	private string _usageCpuLevel = "";
+	private string _usageMemLevel = "";
+
+	public string UsageCpuLevel
+	{
+		get { return _usageCpuLevel; }
+		set { SetField(ref _usageCpuLevel, value, "UsageCpuLevel"); }
+	}
+
+	public string UsageMemLevel
+	{
+		get { return _usageMemLevel; }
+		set { SetField(ref _usageMemLevel, value, "UsageMemLevel"); }
+	}
+
 	public bool IsRunning => string.Equals(_state, "Running", StringComparison.OrdinalIgnoreCase);
 
 	public bool CanStart

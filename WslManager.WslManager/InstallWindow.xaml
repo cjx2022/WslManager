@@ -62,22 +62,8 @@
       </Grid>
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="24,6,24,20">
         <StackPanel>
-          <Grid>
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <StackPanel>
-              <TextBlock Text="环境检查" Style="{StaticResource SectionTitle}" />
-              <TextBlock Style="{StaticResource Sec}" FontSize="12" Text="逐项检测本机是否满足 WSL 安装/运行条件；点击右侧按钮在独立窗口中查看详细结果。" />
-            </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
-              <Button Style="{StaticResource AccentButton}" Margin="0,0,8,0" Click="OpenEnvCheck_Click" Content="打开环境检查" />
-              <Button Style="{StaticResource ActionButton}" Click="InstallDoc_Click" Content="安装文档" />
-            </StackPanel>
-          </Grid>
-          <Border Height="1" Background="{DynamicResource SeparatorBrush}" Margin="0,14,0,0" />
-          <StackPanel Margin="0,14,0,0">
+          <!-- v2.2：环境检查已并入主界面的「环境与安装」页，这里只负责挑镜像 → 测速 → 下载安装。 -->
+          <StackPanel Margin="0,4,0,0">
             <Grid>
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />

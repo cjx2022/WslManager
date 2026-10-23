@@ -1,0 +1,270 @@
+﻿<Window x:Class="WslManager.Wslc.Dialogs.ContainerDetailDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:h="clr-namespace:WslManager.Wslc.Helpers"
+        Title="容器详情"
+        Width="920" Height="836"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" ShowInTaskbar="False"
+        WindowStartupLocation="Manual"
+        FontFamily="Microsoft YaHei UI" FontSize="13"
+        UseLayoutRounding="True">
+    <!-- TextFormattingMode 由 Helpers/TextQuality.cs 按显示器 DPI 设置（不写死）。
+         注意本窗口是 AllowsTransparency=True 的分层窗口：WPF 在这类窗口上默认关闭
+         ClearType（见 RenderOptions.ClearTypeHint 备注），文字会退化成灰度抗锯齿而发虚。
+         所以下面那张不透明卡片必须自己开 ClearTypeHint —— 卡片底色是不透明的，
+         满足该属性的使用前提。 -->
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/Wslc/Themes/Palette.Light.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/Wslc/Themes/Styles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        <h:BrushKeyConverter x:Key="BrushKeyConv"/>
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource ThinScrollBar}"/>
+
+        <!-- 主窗口的 SlimBar 在另一个 Window 的资源里，对话框取不到，这里自备一份 -->
+        <Style x:Key="SlimBar" TargetType="ProgressBar">
+            <Setter Property="Height" Value="6"/>
+            <Setter Property="Maximum" Value="100"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid>
+                            <Border Background="{DynamicResource BorderSoftBrush}" CornerRadius="3"/>
+                            <Border x:Name="PART_Track"/>
+                            <Border x:Name="PART_Indicator" HorizontalAlignment="Left"
+                                    Background="{DynamicResource AccentBrush}" CornerRadius="3"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="MetricLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Foreground" Value="{DynamicResource SubTextBrush}"/>
+        </Style>
+        <Style x:Key="MetricValue" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+        </Style>
+        <Style x:Key="KeyText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Margin" Value="0,0,12,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="ValText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+        <Style x:Key="SegBtn" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource SubTextBrush}"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="bg" Background="Transparent" CornerRadius="6" Padding="14,6">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource CardBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!-- 分层窗口（AllowsTransparency=True）+ DropShadowEffect = 两层都会关掉 ClearType。
+         在**不透明**的卡片上重开 ClearTypeHint，并把它再往下传一层
+         （Effect 本身就是一个中间渲染目标，MSDN 要求在它之后重新声明）。 -->
+    <Border Background="{DynamicResource CardBrush}" CornerRadius="12" Margin="16"
+            BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+            RenderOptions.ClearTypeHint="Enabled">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="26" ShadowDepth="4" Opacity="0.18" Color="{DynamicResource DialogShadowColor}"/>
+        </Border.Effect>
+
+        <Grid RenderOptions.ClearTypeHint="Enabled">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="52"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- 标题 -->
+            <Grid Grid.Row="0" Background="Transparent" MouseLeftButtonDown="OnTitleDrag">
+                <StackPanel Orientation="Horizontal" Margin="20,0,0,0" VerticalAlignment="Center">
+                    <Ellipse x:Name="ElpState" Width="10" Height="10" VerticalAlignment="Center"
+                             Fill="{DynamicResource MutedBrush}"/>
+                    <TextBlock x:Name="TxtTitle" FontSize="15" FontWeight="SemiBold" Margin="9,0,0,0"
+                               VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                    <Border x:Name="BadgeState" Background="{DynamicResource BarBrush}" CornerRadius="10"
+                            Padding="9,3" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtState" FontSize="11.5"
+                                   Foreground="{DynamicResource SubTextBrush}"/>
+                    </Border>
+                </StackPanel>
+                <Button Style="{StaticResource CloseCaptionButton}" HorizontalAlignment="Right"
+                        Content="&#x2715;" Click="OnCloseClick"/>
+            </Grid>
+
+            <!-- 性能 -->
+            <Border Grid.Row="1" Style="{StaticResource Card}" Margin="20,0,20,12" Padding="16,13"
+                    Background="{DynamicResource BarBrush}" BorderBrush="{DynamicResource BorderSoftBrush}">
+                <!-- 两行三列：原来 5 列挤在一行时，最后一格「磁盘 I/O · PID」只用掉 134/150 DIP，
+                     只要块 I/O 数值稍长（如 1.5GB / 900MB）就会把 PID 挤成省略号 → 进程数看不见。
+                     拆成 2x3 后每格约 261 DIP，任何取值都不会被裁。 -->
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="16"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="16"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Row="0" Grid.Column="0">
+                        <TextBlock Text="CPU 使用率" Style="{StaticResource MetricLabel}"/>
+                        <TextBlock x:Name="TxtCpu" Text="—" Style="{StaticResource MetricValue}" Margin="0,3,0,5"/>
+                        <ProgressBar Style="{StaticResource SlimBar}" Maximum="100" x:Name="BarCpu" Value="0"/>
+                    </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="2">
+                        <TextBlock Text="内存使用率" Style="{StaticResource MetricLabel}"/>
+                        <TextBlock x:Name="TxtMemPct" Text="—" Style="{StaticResource MetricValue}" Margin="0,3,0,5"/>
+                        <ProgressBar Style="{StaticResource SlimBar}" Maximum="100" x:Name="BarMem" Value="0"/>
+                    </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="4">
+                        <TextBlock Text="内存用量 / 上限" Style="{StaticResource MetricLabel}"/>
+                        <TextBlock x:Name="TxtMem" Text="—" Style="{StaticResource MetricValue}"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,12,0,0">
+                        <TextBlock Text="网络 I/O" Style="{StaticResource MetricLabel}"/>
+                        <TextBlock x:Name="TxtNet" Text="—" Style="{StaticResource MetricValue}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,12,0,0">
+                        <TextBlock Text="磁盘 I/O" Style="{StaticResource MetricLabel}"/>
+                        <TextBlock x:Name="TxtBlock" Text="—" Style="{StaticResource MetricValue}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="4" Margin="0,12,0,0">
+                        <TextBlock Text="进程数" Style="{StaticResource MetricLabel}"/>
+                        <TextBlock x:Name="TxtPids" Text="—" Style="{StaticResource MetricValue}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 基本信息 -->
+            <Border Grid.Row="2" Style="{StaticResource Card}" Margin="20,0,20,12" Padding="16,13">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <!-- 5 行：网络信息（网络 / IP / 网关）单独占一行。
+                         IP 必须显示 —— 没有端口映射时「端口」列是空的，看起来像"没有地址"，
+                         其实容器一直有 bridge 网段的私有 IP（只是 Windows 侧不可直达）。 -->
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="26"/>
+                        <RowDefinition Height="26"/>
+                        <RowDefinition Height="26"/>
+                        <RowDefinition Height="26"/>
+                        <RowDefinition Height="26"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="容器 ID" Style="{StaticResource KeyText}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="TxtId" Style="{StaticResource ValText}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="状态" Style="{StaticResource KeyText}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="3" x:Name="TxtStatus" Style="{StaticResource ValText}"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="镜像" Style="{StaticResource KeyText}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="TxtImage" Style="{StaticResource ValText}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="创建时间" Style="{StaticResource KeyText}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="3" x:Name="TxtCreated" Style="{StaticResource ValText}"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="命令" Style="{StaticResource KeyText}"/>
+                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="TxtCommand" Style="{StaticResource ValText}"/>
+                    <TextBlock Grid.Row="2" Grid.Column="2" Text="网络" Style="{StaticResource KeyText}"/>
+                    <TextBlock Grid.Row="2" Grid.Column="3" x:Name="TxtNetwork" Style="{StaticResource ValText}"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="IP 地址" Style="{StaticResource KeyText}"/>
+                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="TxtIp" Style="{StaticResource ValText}"
+                               ToolTip="容器在 WSL 内部网络里的私有地址（取自 wslc inspect）。
+该地址 Windows 侧不能直达 —— 要让 Windows 访问容器服务，需在创建容器时映射端口（-p）。"/>
+                    <TextBlock Grid.Row="3" Grid.Column="2" Text="网关" Style="{StaticResource KeyText}"/>
+                    <TextBlock Grid.Row="3" Grid.Column="3" x:Name="TxtGateway" Style="{StaticResource ValText}"/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="端口" Style="{StaticResource KeyText}"/>
+                    <TextBlock Grid.Row="4" Grid.Column="1" x:Name="TxtPorts" Style="{StaticResource ValText}"/>
+                    <TextBlock Grid.Row="4" Grid.Column="2" Text="状态描述" Style="{StaticResource KeyText}"/>
+                    <TextBlock Grid.Row="4" Grid.Column="3" x:Name="TxtStatusDetail" Style="{StaticResource ValText}"/>
+                </Grid>
+            </Border>
+
+            <!-- 配置 / 日志 -->
+            <Grid Grid.Row="3" Margin="20,0,20,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="0,0,0,8">
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton x:Name="SegConfig" Style="{StaticResource SegBtn}" GroupName="seg"
+                                     Content="配置详情" IsChecked="True" Checked="OnSegChanged"/>
+                        <RadioButton x:Name="SegLogs" Style="{StaticResource SegBtn}" GroupName="seg"
+                                     Content="运行日志" Margin="4,0,0,0" Checked="OnSegChanged"/>
+                    </StackPanel>
+                    <Button x:Name="BtnReload" Style="{StaticResource GhostButton}" Padding="12,5"
+                            HorizontalAlignment="Right" Content="刷新" Click="OnReloadClick"/>
+                </Grid>
+
+                <Border Grid.Row="1" Background="{DynamicResource LogBgBrush}"
+                        BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1" CornerRadius="6">
+                    <Grid>
+                        <TextBox x:Name="TxtConfig" IsReadOnly="True" BorderThickness="0" Background="Transparent"
+                                 Padding="12,10" FontFamily="Consolas, Microsoft YaHei UI" FontSize="12"
+                                 AcceptsReturn="True" TextWrapping="NoWrap"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                 Foreground="{DynamicResource TextBrush}"/>
+                        <TextBox x:Name="TxtLogs" IsReadOnly="True" BorderThickness="0" Background="Transparent"
+                                 Padding="12,10" FontFamily="Consolas, Microsoft YaHei UI" FontSize="12"
+                                 AcceptsReturn="True" TextWrapping="NoWrap" Visibility="Collapsed"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                 Foreground="{DynamicResource TextBrush}"/>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- 底部 -->
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right"
+                        Margin="20,14,20,18">
+                <TextBlock x:Name="TxtHint" VerticalAlignment="Center" Margin="0,0,14,0" FontSize="12"
+                           Foreground="{DynamicResource MutedBrush}"/>
+                <Button Style="{StaticResource GhostButton}" Padding="20,8" Content="关闭" Click="OnCloseClick"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

@@ -1,0 +1,70 @@
+﻿<Window x:Class="WslManager.Wslc.Dialogs.AppDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="提示"
+        Width="440" SizeToContent="Height"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" ShowInTaskbar="False"
+        WindowStartupLocation="Manual"
+        FontFamily="Microsoft YaHei UI" FontSize="13.5"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/Wslc/Themes/Palette.Light.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/Wslc/Themes/Styles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        <Style x:Key="DlgButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+            <Setter Property="Padding" Value="20,8"/>
+            <Setter Property="MinWidth" Value="88"/>
+        </Style>
+    
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource CardBrush}" CornerRadius="12" Margin="16"
+            BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="26" ShadowDepth="4" Opacity="0.18" Color="{DynamicResource DialogShadowColor}"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Background="Transparent" MouseLeftButtonDown="OnTitleDrag" Margin="0,0,0,0">
+                <StackPanel Orientation="Horizontal" Margin="22,20,22,0">
+                    <!-- 图标徽章：普通蓝 / 警示红 -->
+                    <Border x:Name="IconBadge" Width="34" Height="34" CornerRadius="17"
+                            Background="{DynamicResource AccentSoftBrush}" VerticalAlignment="Top">
+                        <TextBlock x:Name="IconGlyph" Text="&#xE946;" FontFamily="Segoe MDL2 Assets"
+                                   FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource AccentBrush}"/>
+                    </Border>
+
+                    <StackPanel Margin="14,0,0,0" VerticalAlignment="Top" MaxWidth="330">
+                        <TextBlock x:Name="TxtTitle" FontSize="15" FontWeight="SemiBold"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextBrush}"/>
+                        <TextBlock x:Name="TxtMessage" FontSize="13" Margin="0,8,0,0"
+                                   TextWrapping="Wrap" LineHeight="20"
+                                   Foreground="{DynamicResource SubTextBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                        Margin="22,20,22,18">
+                <Button x:Name="BtnCancel" Style="{StaticResource DlgButton}" Content="取消"
+                        Margin="0,0,10,0" IsCancel="True" Click="OnCancelClick"/>
+                <Button x:Name="BtnOk" Style="{StaticResource DlgButton}" Content="确定"
+                        IsDefault="True" Click="OnOkClick"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

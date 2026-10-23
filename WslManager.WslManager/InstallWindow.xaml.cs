@@ -73,11 +73,19 @@ public class PackageVm : ViewModelBase
 		Package = pkg;
 		var on = onlineName ?? "";
 		_installName = DefaultName(pkg);
-		if (on.Length > 0)
+
+		// 「官方商店」伪源走 wsl --install -d <名字>，它依赖微软清单
+		// （raw.githubusercontent.com/microsoft/WSL/...），该域名境内直连不通，
+		// 会导致命令挂死、界面一直停在"安装中"。
+		// 所以：只要这个包已经有真实下载直链（来自 OfficialManifest），就不要再给伪源。
+		var hasDirect = pkg.Sources.Any(s =>
+			!s.Url.StartsWith("wsl ", StringComparison.OrdinalIgnoreCase));
+
+		if (on.Length > 0 && !hasDirect)
 		{
 			OfficialSources.Add(new MirrorVm
 			{
-				Name = "官方商店",
+				Name = "官方商店（需能访问微软清单）",
 				Location = "微软",
 				Url = $"wsl --install -d {on}",
 				SpeedText = "",
@@ -117,6 +125,10 @@ public partial class InstallWindow : Window
 {
 	private readonly ObservableCollection<PackageVm> _packages = new ObservableCollection<PackageVm>();
 	private readonly List<OnlineDistro> _knownOnline = new List<OnlineDistro>();
+
+	/// <summary>官方清单明细（名字 → 直链与 sha256），用于给发行版挂真实下载源。</summary>
+	private readonly Dictionary<string, OfficialDistro> _official =
+		new Dictionary<string, OfficialDistro>(StringComparer.OrdinalIgnoreCase);
 	private string _statusText = "就绪";
 	private string _progressText = "";
 	private double _progressValue;
@@ -249,6 +261,36 @@ public partial class InstallWindow : Window
 		return added;
 	}
 
+	/// <summary>
+	/// 把官方清单灌进 _official（名字 → 直链 + sha256），并同步到 _knownOnline 供下拉框显示。
+	/// 返回本次新增的条数。
+	/// </summary>
+	private int ApplyOfficial(List<OfficialDistro> list)
+	{
+		var added = 0;
+		foreach (var d in list)
+		{
+			if (string.IsNullOrWhiteSpace(d.Name))
+				continue;
+			_official[d.Name] = d;
+
+			var exist = _knownOnline.FirstOrDefault(x =>
+				x.Name.Equals(d.Name, StringComparison.OrdinalIgnoreCase));
+			if (exist == null)
+			{
+				_knownOnline.Add(new OnlineDistro { Name = d.Name, FriendlyName = d.FriendlyName });
+				added++;
+			}
+			else if (string.IsNullOrWhiteSpace(exist.FriendlyName))
+			{
+				exist.FriendlyName = d.FriendlyName;
+			}
+		}
+		// 按名字排序，保证列表稳定（清单顺序可能随来源变化）
+		_knownOnline.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+		return added;
+	}
+
 	private async Task LoadOptionsAsync(bool forceRefresh = false)
 	{
 		try
@@ -257,13 +299,17 @@ public partial class InstallWindow : Window
 			var fetchedFresh = false;
 			var fromCache = false;
 			var refreshFailed = false;
+			// 官方发行版列表统一走 OfficialManifest（应用自己取微软清单）。
+			// 不再用 wsl --list --online：它和 wsl --install -d 一样依赖
+			// raw.githubusercontent.com，境内直连不通（实测 HTTP 000 / 20s 超时）。
 			if (forceRefresh)
 			{
 				StatusText = "正在刷新官方发行版列表…";
-				var got = await WslInstallerService.ListOnlineAsync(Tok);
-				if (got.Count > 0)
+				var (list, msg) = await OfficialManifest.RefreshAsync(Tok);
+				Log("清单刷新：" + msg);
+				if (list.Count > 0)
 				{
-					added = MergeOnline(got);
+					added = ApplyOfficial(list);
 					WriteOnlineCache(_knownOnline);
 					fetchedFresh = true;
 				}
@@ -274,14 +320,18 @@ public partial class InstallWindow : Window
 			}
 			else if (_knownOnline.Count == 0)
 			{
-				if (System.IO.File.Exists(OnlineCachePath))
+				// 磁盘缓存 → 内置快照，两级都不联网
+				var list = OfficialManifest.Load();
+				if (list.Count > 0)
 				{
-					_knownOnline.AddRange(ReadOnlineCache());
-					fromCache = _knownOnline.Count > 0;
+					added = ApplyOfficial(list);
+					WriteOnlineCache(_knownOnline);
+					fromCache = true;
+					Log($"清单来源：{OfficialManifest.LastSource}，共 {list.Count} 个发行版");
 				}
-				if (_knownOnline.Count == 0)
+				else
 				{
-					StatusText = "正在读取官方发行版列表…";
+					Log("!! 官方清单为空（内置快照也没读到），回退 wsl --list --online");
 					var got = await WslInstallerService.ListOnlineAsync(Tok);
 					if (got.Count > 0)
 					{
@@ -297,17 +347,31 @@ public partial class InstallWindow : Window
 			var matched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 			foreach (var d in online)
 			{
+				_official.TryGetValue(d.Name, out OfficialDistro od);
 				var pkg = MirrorCatalog.Packages.FirstOrDefault(p =>
 					p.OnlineName.Length > 0 && p.OnlineName.Equals(d.Name, StringComparison.OrdinalIgnoreCase));
 				if (pkg != null && matched.Add(pkg.Key))
+				{
+					// 目录里已配好国内镜像的（Ubuntu 三个版本 / Alpine）直接用，镜像通常比官方源快
 					_packages.Add(new PackageVm(pkg, d.Name));
+				}
 				else
+				{
+					// 目录里没有的（Arch / eLxr / Debian / Kali / Fedora / openSUSE / AlmaLinux…）：
+					// 挂官方清单给出的 .wsl 直链，走「自己下载 → wsl --install --from-file」，
+					// 从而绕开 wsl --install -d 对 raw.githubusercontent.com 的依赖。
 					_packages.Add(new PackageVm(new DistroPackage
 					{
 						Key = "online:" + d.Name,
-						Name = d.Name,
-						Version = ""
+						Name = string.IsNullOrWhiteSpace(d.FriendlyName) ? d.Name : d.FriendlyName,
+						Version = "",
+						Method = InstallMethod.WslFile,
+						SizeBytes = 0,
+						Sources = od != null
+							? OfficialManifest.BuildSources(od)
+							: new List<MirrorSource>()
 					}, d.Name));
+				}
 			}
 			foreach (var p in MirrorCatalog.Packages)
 			{
@@ -339,8 +403,6 @@ public partial class InstallWindow : Window
 	{
 		await LoadOptionsAsync(true);
 	}
-
-	private void InstallDoc_Click(object sender, RoutedEventArgs e) => DocLinks.Open(DocLinks.Install);
 
 	private void MirrorDoc_Click(object sender, RoutedEventArgs e) => DocLinks.Open(DocLinks.CustomDistro);
 
@@ -613,23 +675,6 @@ public partial class InstallWindow : Window
 		};
 		_dlWin.Closed += (_, _) => _dlWin = null;
 		_dlWin.Show();
-	}
-
-	private EnvCheckWindow _envWin;
-
-	private void OpenEnvCheck_Click(object sender, RoutedEventArgs e)
-	{
-		if (_envWin != null && _envWin.IsVisible)
-		{
-			_envWin.Activate();
-			return;
-		}
-		_envWin = new EnvCheckWindow
-		{
-			Owner = this
-		};
-		_envWin.Closed += (_, _) => _envWin = null;
-		_envWin.Show();
 	}
 
 	private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

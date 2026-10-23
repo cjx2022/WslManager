@@ -1,0 +1,59 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ============================ 容器模块调色板 · 浅色 ============================
+         与 Palette.Dark.xaml 的键名必须一一对应：切换主题时整份字典替换，
+         所有引用这些键的地方都用 DynamicResource，才能不动 UI 树直接改配色。
+         ============================================================================ -->
+    <Color x:Key="AccentColor">#2B6CF6</Color>
+    <SolidColorBrush x:Key="AccentBrush"        Color="#2B6CF6"/>
+    <SolidColorBrush x:Key="AccentHoverBrush"   Color="#4A82F8"/>
+    <SolidColorBrush x:Key="AccentPressedBrush" Color="#1E56D6"/>
+    <SolidColorBrush x:Key="AccentSoftBrush"    Color="#EAF1FF"/>
+    <SolidColorBrush x:Key="ErrSoftBrush"       Color="#FDECEC"/>
+
+    <!-- 强调色块上的文字：浅色 = 白字（白 on #2B6CF6 = 4.6:1）。深色下反过来用深字。 -->
+    <SolidColorBrush x:Key="OnAccentFgBrush"    Color="#FFFFFF"/>
+
+    <LinearGradientBrush x:Key="WindowGradient" StartPoint="0,0" EndPoint="0.6,1">
+        <GradientStop Color="#FBFCFD" Offset="0"/>
+        <GradientStop Color="#F3F5F9" Offset="0.55"/>
+        <GradientStop Color="#EEF1F6" Offset="1"/>
+    </LinearGradientBrush>
+
+    <SolidColorBrush x:Key="CardBrush"        Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="BarBrush"         Color="#F7F8FB"/>
+    <SolidColorBrush x:Key="BorderBrush2"     Color="#DCE1EA"/>
+    <SolidColorBrush x:Key="BorderSoftBrush"  Color="#E7EBF2"/>
+    <!-- 窗口最外圈的淡蓝细线：无边框窗口（WindowStyle=None）贴屏幕边缘时，
+         没有系统边框会与桌面/其他窗口"糊"在一起，这里补一圈 1px 描边做视觉分界。 -->
+    <SolidColorBrush x:Key="WindowEdgeBrush"  Color="#9DBEE4"/>
+    <SolidColorBrush x:Key="HoverBrush"       Color="#F1F4F9"/>
+    <SolidColorBrush x:Key="TextBrush"        Color="#15181D"/>
+    <SolidColorBrush x:Key="SubTextBrush"     Color="#565E6B"/>
+    <SolidColorBrush x:Key="MutedBrush"       Color="#7A8391"/>
+    <SolidColorBrush x:Key="OkBrush"          Color="#12A150"/>
+    <SolidColorBrush x:Key="WarnBrush"        Color="#D9820A"/>
+    <SolidColorBrush x:Key="ErrBrush"         Color="#E0484D"/>
+    <SolidColorBrush x:Key="InfoBrush"        Color="#2B6CF6"/>
+    <SolidColorBrush x:Key="LogBgBrush"       Color="#F8F9FC"/>
+    <!-- 禁用态文字色：以前用 Opacity=0.38 压整棵子树，那会让 WPF 关掉 ClearType
+         （Opacity 是中间渲染目标 → 背景可能不透明未知 → 退化成灰度抗锯齿），
+         禁用按钮的字就一直是糊的。改成直接给一个不透明的灰字色。 -->
+    <SolidColorBrush x:Key="DisabledFgBrush"  Color="#A8B0BD"/>
+    <!-- 对话框投影色（DropShadowEffect.Color）：浅色下是冷灰蓝，深色下必须纯黑，
+         否则会变成一圈发亮的边 -->
+    <Color x:Key="DialogShadowColor">#2A3245</Color>
+
+    <!-- 以下 5 个是 v2.1 收编的"语义色"：原先是直接写死在样式里的浅色 hex，
+         深色下会变成刺眼的白块/白边 -->
+    <SolidColorBrush x:Key="SoftDangerBgBrush"      Color="#FFF5F5"/>
+    <SolidColorBrush x:Key="SoftDangerBorderBrush"  Color="#F7D4D6"/>
+    <!-- 未悬停的控件描边（复选框方框等）；hover 色比它再深一档 -->
+    <SolidColorBrush x:Key="ControlBorderBrush"      Color="#C6CDD8"/>
+    <SolidColorBrush x:Key="ControlBorderHoverBrush" Color="#CBD3DF"/>
+    <!-- 关闭按钮悬停底：浅色下就是常见的红 -->
+    <SolidColorBrush x:Key="CloseHoverBrush"         Color="#E5484D"/>
+    <SolidColorBrush x:Key="ScrollThumbBrush"       Color="#C9CFD9"/>
+    <SolidColorBrush x:Key="GridAltRowBrush"        Color="#FCFDFE"/>
+</ResourceDictionary>

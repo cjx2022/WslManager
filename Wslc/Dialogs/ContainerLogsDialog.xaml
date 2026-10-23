@@ -1,0 +1,89 @@
+﻿<Window x:Class="WslManager.Wslc.Dialogs.ContainerLogsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="容器日志"
+        Width="960" Height="680"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" ShowInTaskbar="False"
+        WindowStartupLocation="Manual"
+        FontFamily="Microsoft YaHei UI" FontSize="13.5"
+        UseLayoutRounding="True">
+    <!-- 分层窗口（AllowsTransparency=True）会关掉 ClearType，卡片上必须自己开 ClearTypeHint； 排版模式由 Helpers/TextQuality.cs 按 DPI 设置。 -->
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/Wslc/Themes/Palette.Light.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/Wslc/Themes/Styles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource ThinScrollBar}"/>
+    
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource CardBrush}" CornerRadius="12" Margin="16"
+            BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+            RenderOptions.ClearTypeHint="Enabled">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="26" ShadowDepth="4" Opacity="0.18" Color="{DynamicResource DialogShadowColor}"/>
+        </Border.Effect>
+
+        <Grid RenderOptions.ClearTypeHint="Enabled">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="52"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Background="Transparent" MouseLeftButtonDown="OnTitleDrag">
+                <StackPanel Orientation="Horizontal" Margin="20,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="日志" FontSize="15" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                    <TextBlock x:Name="TxtTitle" FontSize="13" Margin="10,0,0,0"
+                               VerticalAlignment="Center" Foreground="{DynamicResource SubTextBrush}"/>
+                </StackPanel>
+                <Button Style="{StaticResource CloseCaptionButton}" HorizontalAlignment="Right"
+                        Content="&#x2715;" Click="OnCloseClick"/>
+            </Grid>
+
+            <Grid Grid.Row="1" Margin="20,0,20,10">
+                <TextBlock x:Name="TxtHint" FontSize="12" VerticalAlignment="Center"
+                           Foreground="{DynamicResource MutedBrush}"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <CheckBox x:Name="ChkFollow" Style="{StaticResource ModernCheckBox}"
+                              Content="跟踪" VerticalAlignment="Center" Margin="0,0,14,0"
+                              ToolTip="每 2 秒自动刷新并滚到最新"
+                              Checked="OnFollowChanged" Unchecked="OnFollowChanged"/>
+                    <TextBlock Text="显示行数" VerticalAlignment="Center" FontSize="12.5" Margin="0,0,6,0"
+                               Foreground="{DynamicResource SubTextBrush}"/>
+                    <Border Background="{DynamicResource BarBrush}" CornerRadius="6"
+                            BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                            Width="76" Height="34">
+                        <TextBox x:Name="TxtTail" Style="{StaticResource ModernTextBox}"
+                                 BorderThickness="0" Background="Transparent" Padding="8,0"
+                                 VerticalContentAlignment="Center" Text="300"/>
+                    </Border>
+                    <Button Style="{StaticResource GhostButton}" Padding="13,5" Margin="10,0,0,0"
+                            Content="刷新" Click="OnReloadClick"/>
+                    <Button Style="{StaticResource GhostButton}" Padding="13,5" Margin="8,0,0,0"
+                            Content="复制" Click="OnCopyClick"/>
+                </StackPanel>
+            </Grid>
+
+            <Border Grid.Row="2" Margin="20,0,20,0" Background="{DynamicResource LogBgBrush}"
+                    BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1" CornerRadius="6">
+                <TextBox x:Name="TxtLogs" IsReadOnly="True" BorderThickness="0" Background="Transparent"
+                         Padding="12,10" FontFamily="Consolas, Microsoft YaHei UI" FontSize="12.5"
+                         AcceptsReturn="True" TextWrapping="NoWrap"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                         Foreground="{DynamicResource TextBrush}"/>
+            </Border>
+
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right"
+                        Margin="20,14,20,18">
+                <Button Style="{StaticResource GhostButton}" Padding="20,8" Content="关闭" Click="OnCloseClick"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

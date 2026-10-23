@@ -1,0 +1,120 @@
+﻿<Window x:Class="WslManager.Wslc.Dialogs.TerminalDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="打开终端"
+        Width="580" SizeToContent="Height"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" ShowInTaskbar="False"
+        WindowStartupLocation="Manual"
+        FontFamily="Microsoft YaHei UI" FontSize="13"
+        UseLayoutRounding="True">
+    <!-- 分层窗口（AllowsTransparency=True）会关掉 ClearType，卡片上必须自己开 ClearTypeHint； 排版模式由 Helpers/TextQuality.cs 按 DPI 设置。 -->
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/Wslc/Themes/Palette.Light.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/Wslc/Themes/Styles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource CardBrush}" CornerRadius="12" Margin="16"
+            BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+            RenderOptions.ClearTypeHint="Enabled">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="26" ShadowDepth="4" Opacity="0.18" Color="{DynamicResource DialogShadowColor}"/>
+        </Border.Effect>
+
+        <Grid RenderOptions.ClearTypeHint="Enabled">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="52"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- 标题 -->
+            <Grid Grid.Row="0" Background="Transparent" MouseLeftButtonDown="OnTitleDrag">
+                <StackPanel Orientation="Horizontal" Margin="20,0,0,0" VerticalAlignment="Center">
+                    <Ellipse x:Name="ElpState" Width="10" Height="10" VerticalAlignment="Center"
+                             Fill="{DynamicResource MutedBrush}"/>
+                    <TextBlock Text="在终端中打开" FontSize="15" FontWeight="SemiBold" Margin="9,0,0,0"
+                               VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                    <TextBlock x:Name="TxtTitle" FontSize="13" Margin="10,0,0,0"
+                               VerticalAlignment="Center" Foreground="{DynamicResource SubTextBrush}"/>
+                    <Border Background="{DynamicResource BarBrush}" CornerRadius="10"
+                            Padding="9,3" Margin="10,0,0,0" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtState" FontSize="11.5"
+                                   Foreground="{DynamicResource SubTextBrush}"/>
+                    </Border>
+                </StackPanel>
+                <Button Style="{StaticResource CloseCaptionButton}" HorizontalAlignment="Right"
+                        Content="&#x2715;" Click="OnCloseClick"/>
+            </Grid>
+
+            <!-- Shell 选择 -->
+            <Border Grid.Row="1" Style="{StaticResource Card}" Margin="20,0,20,12" Padding="16,14"
+                    Background="{DynamicResource BarBrush}" BorderBrush="{DynamicResource BorderSoftBrush}">
+                <StackPanel>
+                    <TextBlock Text="Shell 命令" Style="{StaticResource FieldLabel}"/>
+                    <ComboBox x:Name="CmbShell" Style="{StaticResource ModernComboBox}"
+                              HorizontalAlignment="Left" Width="260" Margin="0,8,0,0"
+                              SelectionChanged="OnShellChanged"/>
+                    <TextBlock x:Name="TxtDetectHint" FontSize="11.5" Margin="0,8,0,0"
+                               TextWrapping="Wrap" LineHeight="18"
+                               Foreground="{DynamicResource MutedBrush}"/>
+
+                    <StackPanel x:Name="PanelCustom" Visibility="Collapsed" Margin="0,10,0,0">
+                        <TextBlock Text="自定义命令" FontSize="12" Margin="0,0,0,6"
+                                   Foreground="{DynamicResource SubTextBrush}"/>
+                        <Border Background="{DynamicResource CardBrush}" CornerRadius="7"
+                                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1">
+                            <TextBox x:Name="TxtCustom" Style="{StaticResource ModernTextBox}"
+                                     BorderThickness="0" Background="Transparent" Padding="10,0"
+                                     FontFamily="Consolas, Microsoft YaHei UI"
+                                     TextChanged="OnCustomTextChanged"/>
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- 将执行的命令 -->
+            <Border Grid.Row="2" Style="{StaticResource Card}" Margin="20,0,20,12" Padding="16,12">
+                <StackPanel>
+                    <TextBlock Text="将执行" FontSize="12" Margin="0,0,0,7"
+                               Foreground="{DynamicResource SubTextBrush}"/>
+                    <Border Background="{DynamicResource LogBgBrush}" CornerRadius="6"
+                            BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1"
+                            Padding="10,8">
+                        <TextBlock x:Name="TxtPreview" FontFamily="Consolas, Microsoft YaHei UI" FontSize="12"
+                                   TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}"/>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!-- 说明 -->
+            <TextBlock Grid.Row="3" x:Name="TxtHint" FontSize="11.5" Margin="20,0,20,0"
+                       TextWrapping="Wrap" LineHeight="18"
+                       Foreground="{DynamicResource MutedBrush}"
+                       Text="列表是打开时实时探测的；没有可用项就直接填自定义命令。"/>
+
+            <!-- 底部 -->
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right"
+                        Margin="20,16,20,18">
+                <Button Style="{StaticResource GhostButton}" Padding="20,8" Margin="0,0,10,0"
+                        Content="取消" Click="OnCancelClick"/>
+                <Button x:Name="BtnOpen" Style="{StaticResource PrimaryButton}" Padding="20,8"
+                        Content="打开终端" Click="OnOpenClick"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

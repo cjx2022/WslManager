@@ -52,6 +52,7 @@ public partial class App : Application
 		{
 		}
 		base.OnStartup(e);
+		ApplyRenderMode();
 		DispatcherUnhandledException += (a0, a1) =>
 		{
 			try
@@ -65,7 +66,7 @@ public partial class App : Application
 		};
 		string[] array = Environment.GetCommandLineArgs().Skip(1).ToArray();
 		SimpleLog.Write("启动参数：" + ((array.Length == 0) ? "(无)" : string.Join(" ", array)));
-		if (array.Length > 0 && !IsResidentMode(array) && !IsElevatedRelaunch(array))
+		if (array.Length > 0 && !IsResidentMode(array) && !IsGuiExtraMode(array) && !IsElevatedRelaunch(array) && !IsMemTest(array) && !IsShotMode(array))
 		{
 			RunCommandAsync(array);
 			return;
@@ -78,7 +79,7 @@ public partial class App : Application
 			_mutex = new Mutex(initiallyOwned: true, "Global\\WslManager.SingleInstance.V2.9A3D", out createdNew);
 			if (!createdNew)
 			{
-				MessageBox.Show("WSL 状态管理器已经在运行了。", "WSL 状态管理器", (MessageBoxButton)0, (MessageBoxImage)64);
+				MessageBox.Show("WSL 管理器已经在运行了。", "WSL 管理器", (MessageBoxButton)0, (MessageBoxImage)64);
 				((Application)this).Shutdown();
 				return;
 			}
@@ -90,12 +91,53 @@ public partial class App : Application
 		}
 		ApplyTheme();
 		MainWindow mainWindow = new MainWindow();
+		// 静默探针（--dump-layout= / --dump-theme= 等）：只写报告文件，全程不弹窗、不抢焦点。
+		// 必须在 Show 之前置位，MainWindow / 弹窗在显示时才会把自己摆到屏幕外。
+		WslManager.Wslc.WslcView.SilentProbe = IsSilentProbeMode(array);
+		// 离屏自检（--shot=<目录>）：窗口摆到屏幕外渲染两个模块并存 PNG，不抢焦点、不动鼠标。
+		string shotDir = null;
+		foreach (string shotArg in array)
+		{
+			if (shotArg.StartsWith("--shot=", StringComparison.OrdinalIgnoreCase))
+			{
+				shotDir = shotArg.Substring("--shot=".Length).Trim('"');
+			}
+		}
+		if (!string.IsNullOrWhiteSpace(shotDir))
+		{
+			mainWindow.RunOffscreenSelfShot(shotDir);
+			return;
+		}
+		// ---- 内存实验钩子：显示窗口后真正销毁它（进程靠 OnExplicitShutdown 继续活着），
+		//      用来验证「销毁窗口能否释放渲染栈」。跑完记得删。----
+		if (array.Length > 0 && Operators.CompareString(array[0], "--memtest", TextCompare: false) == 0)
+		{
+			double delay = 8;
+			if (array.Length > 1) double.TryParse(array[1], out delay);
+			bool trim = array.Length > 2 && Operators.CompareString(array[2], "trim", TextCompare: false) == 0;
+			SimpleLog.Write($"内存实验：显示窗口，{delay} 秒后真正销毁窗口，trim={trim}");
+			((Window)mainWindow).Show();
+			var timer = new System.Windows.Threading.DispatcherTimer
+			{
+				Interval = TimeSpan.FromSeconds(delay)
+			};
+			timer.Tick += (a0, a1) =>
+			{
+				timer.Stop();
+				SimpleLog.Write("内存实验：正在销毁窗口");
+				mainWindow.DestroyWindowForTest(trim);
+			};
+			timer.Start();
+			return;
+		}
 		if (array.Length > 0 && (Operators.CompareString(array[0], "--tray", TextCompare: false) == 0 || Operators.CompareString(array[0], "-b", TextCompare: false) == 0))
 		{
 			mainWindow.StartBackground();
 		}
 		else
 		{
+			// 静默探针：窗口摆到屏幕外再显示 —— 验收不该在用户桌面上弹窗
+			if (WslManager.Wslc.WslcView.SilentProbe) mainWindow.ParkOffscreenForProbe();
 			((Window)mainWindow).Show();
 		}
 	}
@@ -109,9 +151,88 @@ public partial class App : Application
 		return true;
 	}
 
+	/// <summary>
+	/// 只影响 GUI 行为、不构成 CLI 命令的启动参数。带这些参数时**必须进窗口**，
+	/// 否则会被 RunCommandAsync 当成「未知命令」直接 Shutdown。
+	///
+	/// ⚠ 踩过的坑：--autostart 是开机自启写进注册表的参数，一旦被误判成 CLI 命令，
+	///   自启进程启动即退出、一个容器都拉不起来，且日志里只有一句「未知命令」。
+	///   README 里写的 --module=wslc、验收用的 --dump-theme= 同理。
+	/// </summary>
+	private static bool IsGuiExtraMode(string[] args)
+	{
+		foreach (string a in args)
+		{
+			if (a.StartsWith("--autostart", StringComparison.OrdinalIgnoreCase)
+				|| a.StartsWith("--module=", StringComparison.OrdinalIgnoreCase)
+				|| a.StartsWith("--page=", StringComparison.OrdinalIgnoreCase)
+				|| a.StartsWith("--dump-theme=", StringComparison.OrdinalIgnoreCase)
+				|| a.StartsWith("--dump-layout=", StringComparison.OrdinalIgnoreCase))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/// <summary>
+	/// 静默探针参数：只产出报告 / 截图文件，不需要给人看窗口。
+	/// 这类启动必须离屏（主窗口 + 自己点开的弹窗）—— 否则跑一次验收就在用户桌面上弹窗、抢焦点。
+	/// </summary>
+	private static bool IsSilentProbeMode(string[] args)
+	{
+		foreach (string a in args)
+		{
+			if (a.StartsWith("--dump-layout=", StringComparison.OrdinalIgnoreCase)
+				|| a.StartsWith("--dump-theme=", StringComparison.OrdinalIgnoreCase)
+				|| a.StartsWith("--click-start=", StringComparison.OrdinalIgnoreCase)
+				|| a.StartsWith("--shot=", StringComparison.OrdinalIgnoreCase)
+				|| a.StartsWith("--textmode", StringComparison.OrdinalIgnoreCase))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/// <summary>是否为「旧实例提权重启」拉起来的新进程。</summary>
 	private static bool IsElevatedRelaunch(string[] args)
 		=> args.Length > 0 && Operators.CompareString(args[0], "--elevated", TextCompare: false) == 0;
+
+	/// <summary>离屏自检（--shot=&lt;目录&gt;，仅验收用）。</summary>
+	private static bool IsShotMode(string[] args)
+		=> args.Any(a => a.StartsWith("--shot=", StringComparison.OrdinalIgnoreCase));
+
+	/// <summary>内存实验钩子（仅调试用）。</summary>
+	private static bool IsMemTest(string[] args)
+		=> args.Length > 0 && Operators.CompareString(args[0], "--memtest", TextCompare: false) == 0;
+
+	/// <summary>
+	/// 渲染模式。默认走 WPF 硬件加速（Direct3D），代价是会加载显卡厂商的用户态驱动
+	/// （本机 Intel 核显实测 igd12dxva64 + igc64 + igd12um64xel 合计约 150 MB 工作集）。
+	/// 设为 Software 则改用 WPF 内置软件光栅器，完全不碰 Direct3D 与显卡驱动。
+	/// 取值来源：环境变量 WSLMGR_RENDER（优先，便于压测）→ settings.ini 的 RenderMode → Auto。
+	/// </summary>
+	private static void ApplyRenderMode()
+	{
+		string mode = null;
+		try { mode = Environment.GetEnvironmentVariable("WSLMGR_RENDER"); } catch { }
+		if (string.IsNullOrWhiteSpace(mode))
+			mode = AppSettings.GetValue("RenderMode", "Auto");
+
+		if (!string.IsNullOrWhiteSpace(mode)
+			&& (Operators.CompareString(mode, "Software", TextCompare: false) == 0
+				|| Operators.CompareString(mode, "software", TextCompare: false) == 0
+				|| Operators.CompareString(mode, "1", TextCompare: false) == 0))
+		{
+			RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
+			SimpleLog.Write("渲染模式：软件渲染（SoftwareOnly，不加载显卡驱动）");
+		}
+		else
+		{
+			SimpleLog.Write("渲染模式：默认（WPF 硬件加速）");
+		}
+	}
 
 	protected override void OnExit(ExitEventArgs e)
 	{
@@ -144,13 +265,13 @@ public partial class App : Application
 		}
 
 		// 用户点了「提权重启」：现在才拉起管理员实例，避免与上面的互斥量冲突。
-		if (EnvCheckWindow.PendingElevate)
+		if (Wslc.Helpers.ElevationHost.PendingElevate)
 		{
-			EnvCheckWindow.PendingElevate = false;
-			EnvCheckWindow.TryRelaunchElevated();
+			Wslc.Helpers.ElevationHost.PendingElevate = false;
+			Wslc.Helpers.ElevationHost.TryRelaunchElevated();
 		}
 		// 本次退出就是为提权重启服务的，清掉标志，避免影响后续同进程内的其他退出流程。
-		EnvCheckWindow.IsElevateShutdown = false;
+		Wslc.Helpers.ElevationHost.IsElevateShutdown = false;
 
 		base.OnExit(e);
 	}

@@ -29,179 +29,12 @@ using WslManager.Wsl;
 namespace WslManager.UI;
 
 [DesignerGenerated]
-public partial class MainWindow : Window, INotifyPropertyChanged, IComponentConnector, IStyleConnector
+public partial class MainWindow : Window, INotifyPropertyChanged, IComponentConnector
 {
 	[CompilerGenerated]
-	internal sealed class _Closure_0024__52_002D0
-	{
-		public string _0024VB_0024Local_n;
-
-		public _Closure_0024__52_002D0(_Closure_0024__52_002D0 arg0)
-		{
-			if (arg0 != null)
-			{
-				_0024VB_0024Local_n = arg0._0024VB_0024Local_n;
-			}
-		}
-
-		[SpecialName]
-		internal bool _Lambda_0024__0(Distro d)
-		{
-			return string.Equals(d.Name, _0024VB_0024Local_n, StringComparison.OrdinalIgnoreCase);
-		}
-	}
-
-	[CompilerGenerated]
-	internal sealed class _Closure_0024__52_002D1
-	{
-		public Distro _0024VB_0024Local_d;
-
-		public _Closure_0024__52_002D1(_Closure_0024__52_002D1 arg0)
-		{
-			if (arg0 != null)
-			{
-				_0024VB_0024Local_d = arg0._0024VB_0024Local_d;
-			}
-		}
-
-		[SpecialName]
-		internal bool _Lambda_0024__1(DistroViewModel x)
-		{
-			return string.Equals(x.Name, _0024VB_0024Local_d.Name, StringComparison.OrdinalIgnoreCase);
-		}
-	}
-
-	private readonly ObservableCollection<DistroViewModel> _distros;
-
-	private bool _isBusy;
-
-	private int _busyCount;
-
-	private bool _refreshing;
-
 	private bool _reallyExit;
 
-	private string _lastSignature;
-
-	private DispatcherTimer _refreshTimer;
-
-	private RelayCommand _startCmd;
-
-	private RelayCommand _stopCmd;
-
-	private RelayCommand _forceStopCmd;
-
-	private RelayCommand _restartCmd;
-
-	private RelayCommand _startAllCmd;
-
-	private RelayCommand _stopAllCmd;
-
-	private RelayCommand _refreshCmd;
-
 	private NotifyIcon _tray;
-	public ObservableCollection<DistroViewModel> Distros => _distros;
-
-	public bool IsBusy
-	{
-		get
-		{
-			return _isBusy;
-		}
-		set
-		{
-			if (_isBusy != value)
-			{
-				_isBusy = value;
-				RaiseProp("IsBusy");
-			}
-		}
-	}
-
-	public ICommand StartCommand
-	{
-		get
-		{
-			if (_startCmd == null)
-			{
-				_startCmd = new RelayCommand(DoStart);
-			}
-			return _startCmd;
-		}
-	}
-
-	public ICommand StopCommand
-	{
-		get
-		{
-			if (_stopCmd == null)
-			{
-				_stopCmd = new RelayCommand(DoStop);
-			}
-			return _stopCmd;
-		}
-	}
-
-	public ICommand ForceStopCommand
-	{
-		get
-		{
-			if (_forceStopCmd == null)
-			{
-				_forceStopCmd = new RelayCommand(DoForceStop);
-			}
-			return _forceStopCmd;
-		}
-	}
-
-	public ICommand RestartCommand
-	{
-		get
-		{
-			if (_restartCmd == null)
-			{
-				_restartCmd = new RelayCommand(DoRestart);
-			}
-			return _restartCmd;
-		}
-	}
-
-	public ICommand StartAllCommand
-	{
-		get
-		{
-			if (_startAllCmd == null)
-			{
-				_startAllCmd = new RelayCommand(DoStartAll);
-			}
-			return _startAllCmd;
-		}
-	}
-
-	public ICommand StopAllCommand
-	{
-		get
-		{
-			if (_stopAllCmd == null)
-			{
-				_stopAllCmd = new RelayCommand(DoStopAll);
-			}
-			return _stopAllCmd;
-		}
-	}
-
-	public ICommand RefreshCommand
-	{
-		get
-		{
-			if (_refreshCmd == null)
-			{
-				_refreshCmd = new RelayCommand(DoRefresh);
-			}
-			return _refreshCmd;
-		}
-	}
-
 	public event PropertyChangedEventHandler PropertyChanged;
 
 	private void RaiseProp(string name = "")
@@ -211,6 +44,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IComponentConn
 
 	public MainWindow()
 	{
+		// 开机自启：必须**在第一次容器刷新之前**取走「待恢复名单」——
+		// 刷新会把「当前运行中的容器」写回名单文件，而开机那一刻必然一个都没跑，
+		// 上次关机留下的名单会被刷成空（0.9.3 实测踩过：--autostart 跑完一个都没拉起）。
+		Wslc.Helpers.AutoStart.CapturePendingOnStartup();
+
 		//IL_000e: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0018: Expected Obj, but got Unknown
 		//IL_0056: Unknown result type (might be due to invalid IL or missing references)
@@ -220,62 +58,181 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IComponentConn
 		((Window)this).StateChanged += MainWindow_StateChanged;
 		((Window)this).Closing += MainWindow_Closing;
 		((UIElement)this).KeyDown += MainWindow_KeyDown;
-		_distros = new ObservableCollection<DistroViewModel>();
-		_isBusy = false;
-		_busyCount = 0;
-		_refreshing = false;
 		_reallyExit = false;
-		_lastSignature = "";
 		InitializeComponent();
 		((FrameworkElement)this).DataContext = this;
-		TitleIcon.Source = AppIcon.MakeImageSource(running: false, 32);
+		TitleIcon.Source = AppIcon.MakeImageSource(running: false, 96);
+		try
+		{
+			VersionText.Text = "v" + (GetType().Assembly.GetName().Version?.ToString(3) ?? "2.0.1");
+		}
+		catch
+		{
+		}
 		((Window)this).Icon = AppIcon.MakeImageSource();
 		SetupTray();
-		SetupTimers();
-		bool flag = Operators.CompareString(AppSettings.GetValue("AutoRefresh", "1"), "1", TextCompare: false) == 0;
-		((ToggleButton)AutoRefreshCheck).IsChecked = flag;
-		_refreshTimer.IsEnabled = flag;
-	}
 
-	private void SetupTimers()
-	{
-		//IL_0001: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0006: Unknown result type (might be due to invalid IL or missing references)
-		//IL_001f: Expected Obj, but got Unknown
-		_refreshTimer = new DispatcherTimer
+		// 注销 / 关机时窗口不走 Closing（进程被直接结束）—— 想留下「关机时谁在跑」，
+		// 只能挂在这个事件上。写的是一个几行的文本文件，同步做完来得及。
+		try
 		{
-			Interval = TimeSpan.FromSeconds(5.0)
-		};
-		_refreshTimer.Tick += [SpecialName] (object a0, EventArgs a1) =>
+			Application.Current.SessionEnding += (s, e) => _wslcView?.SaveAutoStartSnapshotNow();
+		}
+		catch
 		{
-			RefreshAsyncWrapper();
-		};
-	}
-
-	private async void RefreshAsyncWrapper()
-	{
-		await RefreshAsync(silent: true);
+		}
 	}
 
 	private void MainWindow_Loaded(object sender, RoutedEventArgs e)
 	{
 		OnThemeChanged(App.IsDark);
-		AwaitFirstRun();
+		// v2.2：内容区只有容器模块，启动就创建（开机自启的容器恢复逻辑在它的 Loaded 里）
+		EnsureWslcView();
+		DumpTheme();
+		ApplyAutoStartHide();
+		TrimAfterFirstRender();
 		((UIElement)this).Focus();
+	}
+
+	/// <summary>
+	/// `--dump-theme=&lt;路径&gt;`：导出主题状态与「对齐类」控件的**真实矩形**。
+	///
+	/// 为什么需要它：「左下角按钮与右下角提示是否同一基线」「按钮与输入框是否同一中轴」
+	/// 这类问题差几个像素，截图缩略图看不出来，只能量。0.9.3 起就有这个验收参数，
+	/// 并入 v2.x 时漏了 —— 这里补回，并适配成「宿主标题栏 + 容器页」两段。
+	/// 只在显式带参数时生效，正常运行完全不受影响。
+	/// </summary>
+	private void DumpTheme()
+	{
+		var arg = Environment.GetCommandLineArgs()
+			.FirstOrDefault(a => a.StartsWith("--dump-theme=", StringComparison.OrdinalIgnoreCase));
+		if (arg == null) return;
+
+		var path = arg.Substring("--dump-theme=".Length).Trim().Trim('"');
+		if (path.Length == 0) return;
+
+		try
+		{
+			((FrameworkElement)this).UpdateLayout();
+			WslcHost?.UpdateLayout();
+
+			var sb = new System.Text.StringBuilder();
+			sb.AppendLine("== 主题状态 ==");
+			sb.AppendLine("  App.IsDark = " + App.IsDark);
+			var glyph = ThemeGlyph?.Text ?? "";
+			sb.AppendLine("  主题图标  = U+" + (glyph.Length > 0 ? ((int)glyph[0]).ToString("X4") : "----") +
+			              "   (E706 太阳 / E708 月亮)");
+
+			sb.AppendLine();
+			sb.AppendLine("== 标题栏（42px 行）：各控件中心 y 应在同一基线 ==");
+			var items = new List<(string Label, FrameworkElement El)>
+			{
+				("logo", TitleIcon),
+				("版本号", VersionText),
+				("主题按钮", ThemeGlyph?.Parent as FrameworkElement),
+			};
+			double maxDelta = 0;
+			double baseline = double.NaN;
+			foreach (var it in items)
+			{
+				var r = RectOf(it.El);
+				if (r.IsEmpty) { sb.AppendLine($"  {it.Label,-14} !! 未布局"); continue; }
+				double cy = r.Y + r.Height / 2;
+				if (double.IsNaN(baseline)) baseline = cy;
+				maxDelta = Math.Max(maxDelta, Math.Abs(cy - baseline));
+				sb.AppendLine($"  {it.Label,-14} x={r.X:0.#}  y={r.Y:0.#}  {r.Width:0.#}×{r.Height:0.#}   中心 y={cy:0.#}");
+			}
+			if (!double.IsNaN(baseline))
+				sb.AppendLine($"  最大偏差 |Δcy| = {maxDelta:0.#} px  →  {(maxDelta <= 2 ? "同基线 PASS" : "不在同一条线 !!")}");
+
+			if (_wslcView != null)
+			{
+				sb.AppendLine();
+				sb.Append(_wslcView.BuildThemeAlignmentReport());
+			}
+			else sb.AppendLine("\r\n== 容器模块 ==（未创建：本次启动没进容器页）");
+
+			System.IO.File.WriteAllText(path, sb.ToString(), new System.Text.UTF8Encoding(false));
+		}
+		catch
+		{
+		}
+	}
+
+	private System.Windows.Rect RectOf(FrameworkElement el)
+	{
+		if (el == null || el.ActualWidth <= 0 || el.ActualHeight <= 0) return System.Windows.Rect.Empty;
+		try
+		{
+			var p = el.TransformToAncestor(this).Transform(new System.Windows.Point(0, 0));
+			return new System.Windows.Rect(p.X, p.Y, el.ActualWidth, el.ActualHeight);
+		}
+		catch { return System.Windows.Rect.Empty; }
+	}
+
+	/// <summary>
+	/// 开机自启 + 「自启时最小化到托盘」：等容器视图首次加载（含恢复）完成后再 Hide，
+	/// 否则窗口先隐藏、视图的 Loaded 可能不触发，容器一个都不会被拉起。
+	/// </summary>
+	private async void ApplyAutoStartHide()
+	{
+		try
+		{
+			if (!Wslc.Helpers.AutoStart.LaunchedByAutoStart) return;
+			if (!Wslc.Helpers.AppSettings.AutoStartMinimized) return;
+
+			var view = _wslcView;
+			if (view == null) return;
+
+			await view.StartupDone;
+			((Window)this).ShowInTaskbar = false;
+			((Window)this).Hide();
+			TrimWorkingSetIfEnabled();
+			SimpleLog.Write("开机自启：后台恢复完成，已最小化到托盘");
+		}
+		catch
+		{
+		}
+	}
+
+	// ══════════════════════════ 内容区（v2.2） ══════════════════════════
+	// 只剩容器模块一个内容区；发行版管理是它左侧导航里的一页，
+	// 因此不再有「模块切换」这一步，创建时机与原先「切到容器模块」一致（启动即创建）。
+
+	private Wslc.WslcView _wslcView;
+
+	private Wslc.WslcView EnsureWslcView()
+	{
+		if (_wslcView != null) return _wslcView;
+
+		_wslcView = new Wslc.WslcView();
+		WslcHost.Content = _wslcView;
+		// 创建时按当前宿主主题套一次配色（此时可能还没进视觉树，上面的 OnThemeChanged 找不到它）
+		Wslc.Helpers.ThemeSwitcher.ApplyTo(_wslcView, App.IsDark);
+
+		// 托盘图标/文案跟随发行版运行数（v2.2：数据由发行版页提供，宿主只负责画托盘）
+		_wslcView.DistroRunningChanged += n =>
+			Dispatcher.BeginInvoke(new Action(() => UpdateTrayIcon(n)), DispatcherPriority.Background);
+
+		// 容器页原设计 1120x660 起，窗口太小时先撑一下
+		if (((Window)this).Width < 1180)
+		{
+			((Window)this).Width = 1180;
+		}
+		if (((Window)this).Height < 720)
+		{
+			((Window)this).Height = 720;
+		}
+		TrimAfterModuleSwitch();
+		return _wslcView;
 	}
 
 	public void StartBackground()
 	{
 		SimpleLog.Write("以托盘常驻模式启动");
 		((Window)this).ShowInTaskbar = false;
-		AwaitFirstRun();
-	}
-
-	private async void AwaitFirstRun()
-	{
-		await RefreshAsync();
-		string text = await WslService.GetWslVersionAsync();
-		WslVersionText.Text = text;
+		// 不显示窗口 → 视图的 Loaded 不会触发，得主动把启动流程推起来
+		EnsureWslcView().EnsureStarted();
 	}
 
 	private void MainWindow_SourceInitialized(object sender, EventArgs e)
@@ -307,6 +264,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IComponentConn
 
 	private void MainWindow_Closing(object sender, CancelEventArgs e)
 	{
+		// 退出前留一份「谁在跑」的名单（自启恢复靠它）—— 两个分支都要写，
+		// 因为 _reallyExit 才是真正退出，而 Hide() 分支也可能紧跟着被托盘退出。
+		try { _wslcView?.SaveAutoStartSnapshotNow(); }
+		catch { }
+
 		if (_reallyExit)
 		{
 			if (_tray != null)
@@ -316,450 +278,25 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IComponentConn
 				_tray = null;
 			}
 		}
-		else if (!EnvCheckWindow.IsElevateShutdown)
+		else if (!Wslc.Helpers.ElevationHost.IsElevateShutdown)
 		{
 			e.Cancel = true;
 			((Window)this).Hide();
-			SetStatus("已最小化到系统托盘，双击托盘图标可重新打开");
+			SimpleLog.Write("已最小化到系统托盘，双击托盘图标可重新打开");
+			TrimWorkingSetIfEnabled();
 		}
 	}
 
 	private async void MainWindow_KeyDown(object sender, KeyEventArgs e)
 	{
-		if ((int)e.Key == 94)
+		// F5：刷新当前页（v2.2 起各页自己的刷新逻辑都在容器视图里）
+		if (e.Key == Key.F5)
 		{
-			await RefreshAsync();
-			SetStatus("已手动刷新");
+			if (_wslcView != null) await _wslcView.RefreshActivePageAsync();
 		}
-		else if ((int)e.Key == 13)
+		else if (e.Key == Key.Escape)
 		{
 			((Window)this).Hide();
-		}
-	}
-
-	public async Task RefreshAsync(bool silent = false)
-	{
-		if (_refreshing)
-		{
-			return;
-		}
-		_refreshing = true;
-		if (!silent)
-		{
-			BusyEnter();
-		}
-		checked
-		{
-			try
-			{
-				List<Distro> list = await WslService.ListDistrosAsync();
-				_Closure_0024__52_002D0 obj = default;
-				for (int i = _distros.Count - 1; i >= 0; i += -1)
-				{
-					obj = new _Closure_0024__52_002D0(obj);
-					obj._0024VB_0024Local_n = _distros[i].Name;
-					if (!list.Any(obj._Lambda_0024__0))
-					{
-						_distros.RemoveAt(i);
-					}
-				}
-				using (List<Distro>.Enumerator enumerator = list.GetEnumerator())
-				{
-					_Closure_0024__52_002D1 obj2 = default;
-					while (enumerator.MoveNext())
-					{
-						obj2 = new _Closure_0024__52_002D1(obj2);
-						obj2._0024VB_0024Local_d = enumerator.Current;
-						DistroViewModel distroViewModel = _distros.FirstOrDefault(obj2._Lambda_0024__1);
-						if (distroViewModel == null)
-						{
-							DistroViewModel distroViewModel2 = new DistroViewModel();
-							distroViewModel2.UpdateFrom(obj2._0024VB_0024Local_d);
-							_distros.Add(distroViewModel2);
-						}
-						else
-						{
-							distroViewModel.UpdateFrom(obj2._0024VB_0024Local_d);
-						}
-					}
-				}
-				SortDistros();
-				UpdateSummary();
-				string text = string.Join(" | ", list.Select([SpecialName] (Distro d) => d.Name + "=" + d.State).ToArray());
-				bool flag = Operators.CompareString(text, _lastSignature, TextCompare: false) != 0;
-				_lastSignature = text;
-				if (flag)
-				{
-					SimpleLog.Write("状态变化：" + text);
-					LastUpdateText.Text = "更新于 " + DateTime.Now.ToString("HH:mm:ss");
-				}
-				else if (!silent)
-				{
-					LastUpdateText.Text = "更新于 " + DateTime.Now.ToString("HH:mm:ss");
-				}
-				((UIElement)EmptyState).Visibility = (Visibility)((_distros.Count != 0) ? 2 : 0);
-				_ = UpdateIpsAsync();
-				UpdateUptimes();
-				UpdateTrayIcon();
-			}
-			catch (Exception ex)
-			{
-				ProjectData.SetProjectError(ex);
-				Exception ex2 = ex;
-				if (silent)
-				{
-					SimpleLog.Write("后台刷新失败：" + ex2.Message);
-				}
-				else
-				{
-					SetStatus("读取状态失败：" + ex2.Message);
-				}
-				ProjectData.ClearProjectError();
-			}
-			finally
-			{
-				_refreshing = false;
-				if (!silent)
-				{
-					BusyLeave();
-				}
-			}
-		}
-	}
-
-	private void SortDistros()
-	{
-		checked
-		{
-			int num = _distros.Count - 1;
-			for (int i = 0; i <= num; i++)
-			{
-				int num2 = i;
-				int num3 = i + 1;
-				int num4 = _distros.Count - 1;
-				for (int j = num3; j <= num4; j++)
-				{
-					if (CompareDistro(_distros[j], _distros[num2]) < 0)
-					{
-						num2 = j;
-					}
-				}
-				if (num2 != i)
-				{
-					_distros.Move(num2, i);
-				}
-			}
-		}
-	}
-
-	private int CompareDistro(DistroViewModel a, DistroViewModel b)
-	{
-		if (a.IsDefault != b.IsDefault)
-		{
-			return (!a.IsDefault) ? 1 : (-1);
-		}
-		return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-	}
-
-	private async Task UpdateIpsAsync()
-	{
-		foreach (DistroViewModel item in _distros.ToList())
-		{
-			try
-			{
-				if (item.IsRunning)
-				{
-					string text = await WslService.GetIpAsync(item.Name);
-					item.Ip = ((text.Length > 0) ? text : "未获取到 IP");
-				}
-				else
-				{
-					item.Ip = "";
-				}
-			}
-			catch (Exception projectError)
-			{
-				ProjectData.SetProjectError(projectError);
-				ProjectData.ClearProjectError();
-			}
-		}
-	}
-
-	private void UpdateUptimes()
-	{
-		foreach (DistroViewModel distro in _distros)
-		{
-			DateTime? startTime = WslService.GetStartTime(distro.Name);
-			if (startTime.HasValue && distro.IsRunning)
-			{
-				distro.Uptime = FormatUptime(DateTime.Now - startTime.Value);
-			}
-			else
-			{
-				distro.Uptime = "";
-			}
-		}
-	}
-
-	private string FormatUptime(TimeSpan ts)
-	{
-		if (ts.TotalHours >= 1.0)
-		{
-			return Conversions.ToString(Math.Floor(ts.TotalHours)) + " 小时 " + Conversions.ToString(ts.Minutes) + " 分";
-		}
-		if (ts.TotalMinutes >= 1.0)
-		{
-			return Conversions.ToString(Math.Floor(ts.TotalMinutes)) + " 分 " + Conversions.ToString(ts.Seconds) + " 秒";
-		}
-		return Conversions.ToString(ts.Seconds) + " 秒";
-	}
-
-	private void UpdateSummary()
-	{
-		int count = _distros.Count;
-		int num = _distros.AsEnumerable().Count([SpecialName] (DistroViewModel d) => d.IsRunning);
-		SummaryText.Text = $"共 {count} 个发行版  ·  {num} 个运行中  ·  {checked(count - num)} 个已停止";
-	}
-
-	private void BusyEnter()
-	{
-		checked
-		{
-			_busyCount++;
-			if (_busyCount == 1)
-			{
-				IsBusy = true;
-			}
-		}
-	}
-
-	private void BusyLeave()
-	{
-		checked
-		{
-			_busyCount--;
-			if (_busyCount <= 0)
-			{
-				_busyCount = 0;
-				IsBusy = false;
-			}
-		}
-	}
-
-	private void SetStatus(string msg)
-	{
-		StatusMessage.Text = msg;
-		SimpleLog.Write(msg);
-	}
-
-	private DistroViewModel Find(string name)
-	{
-		return _distros.FirstOrDefault([SpecialName] (DistroViewModel x) => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
-	}
-
-	private async void DoStart(object param)
-	{
-		await RunAction(Conversions.ToString(RuntimeHelpers.GetObjectValue(param)), "开机", [SpecialName] () => WslService.StartAsync(Conversions.ToString(param)));
-	}
-
-	private async void DoStop(object param)
-	{
-		string text = Conversions.ToString(RuntimeHelpers.GetObjectValue(param));
-		await RunAction(text, "关机", [SpecialName] () => WslService.StopAsync(text), [SpecialName] (WslResult r) => (!r.Graceful) ? $"{text} 已强制终止（软关机超时，未落盘的数据可能丢失）" : $"{text} 已正常关机");
-	}
-
-	private async void DoForceStop(object param)
-	{
-		string name = Conversions.ToString(RuntimeHelpers.GetObjectValue(param));
-		await RunAction(name, "强制关机", [SpecialName] () => WslService.TerminateAsync(name));
-	}
-
-	private async void DoRestart(object param)
-	{
-		string name = Conversions.ToString(RuntimeHelpers.GetObjectValue(param));
-		await RunAction(name, "重启", [SpecialName] () => WslService.RestartAsync(name));
-	}
-
-	private async void DoStartAll(object param)
-	{
-		List<string> list = (from d in _distros
-			where !d.IsRunning
-			select d.Name).ToList();
-		if (list.Count == 0)
-		{
-			SetStatus("所有发行版都已在运行中");
-			return;
-		}
-		BusyEnter();
-		SetStatus($"正在开机 {list.Count} 个发行版…");
-		int num = 0;
-		foreach (string item in list)
-		{
-			if ((await WslService.StartAsync(item)).Success)
-			{
-				num = checked(num + 1);
-			}
-		}
-		BusyLeave();
-		SetStatus($"已开机 {num}/{list.Count} 个发行版");
-		await RefreshAsync();
-	}
-
-	private async void DoStopAll(object param)
-	{
-		BusyEnter();
-		SetStatus("正在软关机所有发行版，未响应者将强制关闭…");
-		WslResult wslResult = await WslService.ShutdownAllAsync();
-		BusyLeave();
-		SetStatus(wslResult.Success ? "已关闭所有发行版（先软关机，再 wsl --shutdown 兜底）" : ("关闭失败：" + wslResult.ErrorMessage));
-		await RefreshAsync();
-	}
-
-	private async void DoRefresh(object param)
-	{
-		await RefreshAsync();
-	}
-
-	private async Task RunAction(string name, string verb, Func<Task<WslResult>> action, Func<WslResult, string> describe = null)
-	{
-		DistroViewModel distroViewModel = Find(name);
-		if (distroViewModel == null)
-		{
-			return;
-		}
-		distroViewModel.IsBusy = true;
-		BusyEnter();
-		SetStatus($"正在{verb} {name}…");
-		try
-		{
-			WslResult wslResult = await action();
-			if (wslResult.Success)
-			{
-				SetStatus((describe != null) ? describe(wslResult) : $"{name} 已{verb}");
-			}
-			else
-			{
-				string text = ((wslResult.ErrorMessage.Length > 0) ? wslResult.ErrorMessage : wslResult.StdErr.Trim());
-				if (text.Length == 0)
-				{
-					text = "退出码 " + Conversions.ToString(wslResult.ExitCode);
-				}
-				SetStatus($"{name} {verb}失败：{text}");
-			}
-		}
-		catch (Exception ex)
-		{
-			ProjectData.SetProjectError(ex);
-			Exception ex2 = ex;
-			SetStatus($"{name} {verb}异常：{ex2.Message}");
-			ProjectData.ClearProjectError();
-		}
-		finally
-		{
-			distroViewModel.IsBusy = false;
-			BusyLeave();
-		}
-		await RefreshAsync();
-	}
-
-	private void TerminalButton_Click(object sender, RoutedEventArgs e)
-	{
-		//IL_0001: Unknown result type (might be due to invalid IL or missing references)
-		string text = Conversions.ToString(((FrameworkElement)(Button)sender).Tag);
-		SetStatus("正在打开 " + text + " 终端…");
-		WslService.OpenTerminal(text);
-	}
-
-	private void FilesButton_Click(object sender, RoutedEventArgs e)
-	{
-		//IL_0001: Unknown result type (might be due to invalid IL or missing references)
-		string text = Conversions.ToString(((FrameworkElement)(Button)sender).Tag);
-		SetStatus("正在打开 " + text + " 文件系统…");
-		WslService.OpenFiles(text);
-	}
-
-	private void MoreButton_Click(object sender, RoutedEventArgs e)
-	{
-		//IL_0001: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0007: Expected Obj, but got Unknown
-		Button val = (Button)sender;
-		if (((FrameworkElement)val).ContextMenu != null)
-		{
-			((FrameworkElement)val).ContextMenu.PlacementTarget = (UIElement)(object)val;
-			((FrameworkElement)val).ContextMenu.IsOpen = true;
-		}
-		e.Handled = true;
-	}
-
-	private string OwnerName(object item)
-	{
-		MenuItem val = (MenuItem)((item is MenuItem) ? item : null);
-		if (val == null)
-		{
-			return "";
-		}
-		DependencyObject parent = ((FrameworkElement)val).Parent;
-		ContextMenu val2 = (ContextMenu)(object)((parent is ContextMenu) ? parent : null);
-		if (val2 == null)
-		{
-			return "";
-		}
-		UIElement placementTarget = val2.PlacementTarget;
-		Button val3 = (Button)(object)((placementTarget is Button) ? placementTarget : null);
-		if (val3 == null)
-		{
-			return "";
-		}
-		return Conversions.ToString(((FrameworkElement)val3).Tag);
-	}
-
-	private async void SetDefault_Click(object sender, RoutedEventArgs e)
-	{
-		string text = OwnerName(RuntimeHelpers.GetObjectValue(sender));
-		if (text.Length != 0)
-		{
-			BusyEnter();
-			WslResult wslResult = await WslService.SetDefaultAsync(text);
-			BusyLeave();
-			SetStatus(wslResult.Success ? $"已将 {text} 设为默认发行版" : ("设置失败：" + wslResult.ErrorMessage));
-			await RefreshAsync();
-		}
-	}
-
-	private void CopyIp_Click(object sender, RoutedEventArgs e)
-	{
-		string name = OwnerName(RuntimeHelpers.GetObjectValue(sender));
-		DistroViewModel distroViewModel = Find(name);
-		if (distroViewModel != null)
-		{
-			if (distroViewModel.Ip.Length > 0 && Operators.CompareString(distroViewModel.Ip, "未获取到 IP", TextCompare: false) != 0)
-			{
-				Clipboard.SetText(distroViewModel.Ip);
-				SetStatus("已复制 IP：" + distroViewModel.Ip);
-			}
-			else
-			{
-				SetStatus("该发行版当前没有可用 IP");
-			}
-		}
-	}
-
-	private void CopyName_Click(object sender, RoutedEventArgs e)
-	{
-		string text = OwnerName(RuntimeHelpers.GetObjectValue(sender));
-		if (text.Length > 0)
-		{
-			Clipboard.SetText(text);
-			SetStatus("已复制发行版名称：" + text);
-		}
-	}
-
-	private async void ForceStop_Click(object sender, RoutedEventArgs e)
-	{
-		string text = OwnerName(RuntimeHelpers.GetObjectValue(sender));
-		if (text.Length != 0)
-		{
-			await RunAction(text, "强制关机", [SpecialName] () => WslService.TerminateAsync(text));
 		}
 	}
 
@@ -798,7 +335,150 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IComponentConn
 	private void HideButton_Click(object sender, RoutedEventArgs e)
 	{
 		((Window)this).Hide();
-		SetStatus("已最小化到系统托盘，双击托盘图标可重新打开");
+		SimpleLog.Write("已最小化到系统托盘，双击托盘图标可重新打开");
+		TrimWorkingSetIfEnabled();
+	}
+
+	[System.Runtime.InteropServices.DllImport("psapi.dll")]
+	private static extern bool EmptyWorkingSet(IntPtr hProcess);
+
+	/// <summary>
+	/// 隐藏到托盘后，把本进程的工作集交还系统。默认开启（TrimOnHide 缺省为 1）。
+	///
+	/// 实测（本机 Intel Iris Xe / i5-12500H，窗口 940x640）：
+	///   不回收：可见 282 MB → 进托盘仍 284 MB（几乎不降）
+	///   回收　：可见 277 MB → 进托盘 32.6 MB（降 244.8 MB）
+	///
+	/// 原理：WPF 窗口即使 Hide 了，用户态渲染栈（内含显卡驱动的已驻留页）依旧被引用，
+	/// 系统不会主动换出；先 GC 掉已无引用的托管对象，再 EmptyWorkingSet 让系统
+	/// 把这些页移出物理内存，任务管理器上的数字立刻下来。
+	/// 代价：下次从托盘唤起窗口时，这些页需要重新 fault in，首次显示略慢（毫秒级）。
+	///
+	/// 关闭方法：settings.ini 里写 TrimOnHide=0。
+	/// </summary>
+	internal static void TrimWorkingSetIfEnabled()
+	{
+		string flag = null;
+		try { flag = Environment.GetEnvironmentVariable("WSLMGR_TRIM"); } catch { }
+		if (string.IsNullOrWhiteSpace(flag))
+			flag = AppSettings.GetValue("TrimOnHide", "1");
+
+		if (Operators.CompareString(flag, "0", TextCompare: false) == 0
+			|| Operators.CompareString(flag, "false", TextCompare: false) == 0)
+			return;
+
+		TrimWorkingSet("隐藏到托盘");
+	}
+
+	/// <summary>
+	/// 真正做回收：GC → EmptyWorkingSet。调用点是「界面上暂时不会再看的东西刚结束」
+	/// （进托盘 / 首次显示稳定后 / 切换模块后），不要在用户正在操作时随手调。
+	/// </summary>
+	internal static void TrimWorkingSet(string reason)
+	{
+		try
+		{
+			long before = CurrentWorkingSetMB();
+
+			GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+			GC.WaitForPendingFinalizers();
+			GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+
+			using (System.Diagnostics.Process proc = System.Diagnostics.Process.GetCurrentProcess())
+			{
+				EmptyWorkingSet(proc.Handle);
+			}
+
+			long after = CurrentWorkingSetMB();
+			SimpleLog.Write($"内存回收（{reason}）：工作集 {before} MB → {after} MB");
+		}
+		catch (Exception ex)
+		{
+			try { SimpleLog.Write("TrimWorkingSet 失败：" + ex.Message); } catch { }
+		}
+	}
+
+	/// <summary>
+	/// 首次显示稳定后回收一次（TrimOnStartup，缺省开）。
+	///
+	/// 为什么需要：硬件渲染下 WPF 首帧会把 D3D 设备 + 显卡用户态驱动（本机实测
+	/// igd12dxva64 / igc64 等约 150 MB）连同渲染栈整片 fault in —— 进程构造完才 100 MB，
+	/// 一显示就跳到 291 MB（工作集）/ 217 MB（私有）。这些页并没有被代码一直引用，
+	/// 只是"刚用过、还在工作集里"，所以进托盘回收能掉到 32 MB。
+	/// 既然机制一样，就没必要等用户去关一次窗口：首帧稳定 1.5 秒后主动做一次。
+	///
+	/// 代价与边界：之后只要重绘（切模块、状态刷新）这些页会重新 fault in，工作集会回到
+	/// 200~300 MB —— 那是 WPF + 显卡驱动的固有成本，回收不改变。想真正压下来只能不加载
+	/// 驱动，即设置 RenderMode=Software（托盘菜单也有一项）。
+	/// </summary>
+	private async void TrimAfterFirstRender()
+	{
+		try
+		{
+			await Task.Delay(1500);
+			if (!TrimOnStartupEnabled())
+			{
+				return;
+			}
+			await Task.Run(() => TrimWorkingSet("首次显示后"));
+		}
+		catch
+		{
+		}
+	}
+
+	private static bool TrimOnStartupEnabled()
+	{
+		string flag = AppSettings.GetValue("TrimOnStartup", "1");
+		return Operators.CompareString(flag, "0", TextCompare: false) != 0
+			&& Operators.CompareString(flag, "false", TextCompare: false) != 0;
+	}
+
+	/// <summary>切模块会重建一批可视化树，隔一会儿再回收一次（同一开关）。</summary>
+	private async void TrimAfterModuleSwitch()
+	{
+		try
+		{
+			await Task.Delay(2500);
+			if (!TrimOnStartupEnabled())
+			{
+				return;
+			}
+			await Task.Run(() => TrimWorkingSet("切换模块后"));
+		}
+		catch
+		{
+		}
+	}
+
+	/// <summary>当前进程的工作集（MB）—— 任务管理器「内存」列看的就是它。</summary>
+	internal static long CurrentWorkingSetMB()
+	{
+		try
+		{
+			using (System.Diagnostics.Process proc = System.Diagnostics.Process.GetCurrentProcess())
+			{
+				proc.Refresh();
+				return proc.WorkingSet64 / (1024 * 1024);
+			}
+		}
+		catch { return -1; }
+	}
+
+	/// <summary>内存探针（--memprobe 用）：把工作集 / 私有字节写进 run.log。</summary>
+	internal static void LogMem(string tag)
+	{
+		try
+		{
+			using (System.Diagnostics.Process proc = System.Diagnostics.Process.GetCurrentProcess())
+			{
+				proc.Refresh();
+				SimpleLog.Write($"内存[{tag}] 工作集={proc.WorkingSet64 / (1024 * 1024)} MB" +
+					$" 私有={proc.PrivateMemorySize64 / (1024 * 1024)} MB" +
+					$" 托管={(GC.GetTotalMemory(false) / (1024 * 1024))} MB");
+			}
+		}
+		catch { }
 	}
 
 	private void ThemeButton_Click(object sender, RoutedEventArgs e)
@@ -808,93 +488,133 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IComponentConn
 		App.ApplyTheme();
 	}
 
-	private void AutoRefresh_Changed(object sender, RoutedEventArgs e)
+	// ══════════════════════════ 离屏自检（--shot=<目录>） ══════════════════════════
+	// 把窗口摆到屏幕外再 Show()，用 WPF 渲染管线截图：不抢焦点、不动鼠标、不遮挡用户，
+	// 因此可以在用户正常使用电脑时跑。用于验收「两个模块的界面都正常」。
+
+	/// <summary>
+	/// 静默探针（--dump-layout / --dump-theme）：把主窗口摆到屏幕外、不激活、不占任务栏。
+	/// 与 --shot 的离屏自检同一套位置，区别只是产出的是文本报告而不是 PNG。
+	/// </summary>
+	public void ParkOffscreenForProbe()
 	{
-		if (_refreshTimer != null)
-		{
-			bool valueOrDefault = ((ToggleButton)AutoRefreshCheck).IsChecked == true;
-			AppSettings.SetValue("AutoRefresh", valueOrDefault ? "1" : "0");
-			_refreshTimer.IsEnabled = valueOrDefault;
-			SetStatus(valueOrDefault ? "已开启自动刷新（每 3 秒）" : "已关闭自动刷新");
-		}
+		Wslc.WslcView.ParkWindowOffscreen(this);
 	}
 
-	private InstallWindow _installWin;
-
-	private UninstallWindow _uninstallWin;
-
-	private void InstallWindow_Click(object sender, RoutedEventArgs e)
+	public async void RunOffscreenSelfShot(string dir)
 	{
-		if (_installWin != null && _installWin.IsVisible)
+		try
 		{
-			_installWin.Activate();
-			return;
-		}
-		_installWin = new InstallWindow
-		{
-			Owner = (Window)(object)this
-		};
-		_installWin.Closed += async (a0, a1) =>
-		{
-			await RefreshAsync(silent: true);
-			SetStatus("安装窗口已关闭，列表已刷新");
-		};
-		_installWin.Show();
-		SetStatus("已打开安装窗口（环境检查 / 镜像测速 / 下载安装）");
-	}
+			Directory.CreateDirectory(dir);
+			ShowInTaskbar = false;
+			ShowActivated = false;   // 不抢前台焦点（验收期间用户可正常使用电脑）
+			WindowStartupLocation = WindowStartupLocation.Manual;
+			Left = -6000;
+			Top = -6000;
+			LogMem("构造完成");
+			Show();
+			await Task.Delay(1200);
+			LogMem("首次显示(1.2s)");
 
-	private void About_Click(object sender, RoutedEventArgs e)
-	{
-		System.Windows.MessageBox.Show(this,
-			"WSL Manager 1.1\n\n开发者：BillChen\n© 2026 BillChen 版权所有\n\n本软件为个人开发作品，仅供学习与个人使用；软件按现状提供，作者不对使用本软件产生的任何损失承担责任。WSL、Windows 等名称归其各自所有者所有。",
-			"关于 WSL Manager",
-			MessageBoxButton.OK,
-			MessageBoxImage.Information);
-	}
+			await Task.Delay(600);
+			SaveShot(Path.Combine(dir, "01-env.png"));
+			LogMem("环境与安装页(1.8s)");
 
-	private void UninstallWindow_Click(object sender, RoutedEventArgs e)
-	{
-		OpenUninstallWindow(null);
-	}
-
-	private void UninstallDistro_Click(object sender, RoutedEventArgs e)
-	{
-		string name = OwnerName(RuntimeHelpers.GetObjectValue(sender));
-		if (name.Length != 0)
-		{
-			OpenUninstallWindow(name);
-		}
-	}
-
-	private void OpenUninstallWindow(string preselect)
-	{
-		if (_uninstallWin != null && _uninstallWin.IsVisible)
-		{
-			if (!string.IsNullOrEmpty(preselect))
+			if (_wslcView != null)
 			{
-				_uninstallWin.SelectDistro(preselect);
+				_wslcView.SelectPageForTest("distro");
+				// 3 秒：发行版列表要跑 wsl -l -v，利用率还要再等一次 /proc 采样，
+				// 1.4 秒截出来的卡片正中常常还是空的（v2.5 实测）
+				await Task.Delay(3000);
+				SaveShot(Path.Combine(dir, "02-distro.png"));
+
+				_wslcView.SelectPageForTest("container");
+				await Task.Delay(2600);
+				SaveShot(Path.Combine(dir, "03-container.png"));
+
+				_wslcView.SelectPageForTest("settings");
+				await Task.Delay(1200);
+				SaveShot(Path.Combine(dir, "04-settings.png"));
+
+				_wslcView.SelectPageForTest("env");
+				await Task.Delay(800);
+				SaveShot(Path.Combine(dir, "05-back-to-env.png"));
 			}
-			_uninstallWin.Activate();
-			return;
+			LogMem("各页走完");
+
+			// 内存实验：可见状态下回收，看能压到多少
+			TrimWorkingSet("自检·可见状态");
+			LogMem("自检·回收后");
+			await Task.Delay(1200);
+			LogMem("自检·回收后 1.2s");
+
+			// 对话框自检：只构造、不显示。StaticResource 在解析期就要能解析，
+			// 所以「构造成功」= 对话框的样式表接得对（并入 Wslc/Themes/Styles.xaml）。
+			var report = new List<string>();
+			void TryDlg(string name, Func<object> make)
+			{
+				try
+				{
+					object o = make();
+					report.Add(name + " → OK");
+					if (o is Window w2)
+					{
+						w2.Close();
+					}
+				}
+				catch (Exception ex)
+				{
+					report.Add(name + " → 失败：" + ex.GetType().Name + " " + ex.Message);
+				}
+			}
+			var sample = new Wslc.Models.ContainerInfo { Name = "selftest" };
+			var noImages = new List<Wslc.Models.ImageInfo>();
+			TryDlg("CreateContainerDialog", () => new Wslc.Dialogs.CreateContainerDialog(noImages, new[] { "bridge", "app-net" }));
+			TryDlg("ContainerDetailDialog", () => new Wslc.Dialogs.ContainerDetailDialog(sample));
+			TryDlg("ContainerLogsDialog", () => new Wslc.Dialogs.ContainerLogsDialog(sample));
+			TryDlg("TerminalDialog", () => new Wslc.Dialogs.TerminalDialog(sample));
+			TryDlg("AppDialog", () => Wslc.Dialogs.AppDialog.Build("自检", "对话框资源自检", "知道了", danger: false));
+			report.Insert(0, "版本 " + (GetType().Assembly.GetName().Version?.ToString(3) ?? "?"));
+			File.WriteAllText(Path.Combine(dir, "dialog-check.txt"), string.Join(Environment.NewLine, report), new UTF8Encoding(false));
 		}
-		_uninstallWin = new UninstallWindow
+		catch (Exception ex)
 		{
-			Owner = (Window)(object)this,
-			PreselectName = preselect ?? ""
-		};
-		_uninstallWin.Closed += async (a0, a1) =>
+			try { SimpleLog.Write("离屏自检失败：" + ex); } catch { }
+		}
+		finally
 		{
-			await RefreshAsync(silent: true);
-			SetStatus("卸载窗口已关闭，列表已刷新");
-		};
-		_uninstallWin.Show();
-		SetStatus("已打开卸载窗口（导出备份 + 输入确认卸载）");
+			try { _reallyExit = true; } catch { }
+			Application.Current?.Shutdown();
+		}
 	}
+
+	private void SaveShot(string path)
+	{
+		var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
+		var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(
+			(int)Math.Ceiling(ActualWidth * dpi.DpiScaleX),
+			(int)Math.Ceiling(ActualHeight * dpi.DpiScaleY),
+			96 * dpi.DpiScaleX, 96 * dpi.DpiScaleY, System.Windows.Media.PixelFormats.Pbgra32);
+		rtb.Render(this);
+		var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+		enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+		using (var fs = File.Create(path))
+		{
+			enc.Save(fs);
+		}
+		SimpleLog.Write("离屏截图：" + path);
+	}
+
+	// 关于 / 卸载入口已随发行版页一起搬进容器视图：
+	// 「关于」在容器模块的设置与加速页，卸载在发行版管理页。
 
 	public void OnThemeChanged(bool dark)
 	{
 		ThemeGlyph.Text = (dark ? '\ue706'.ToString() : '\ue708'.ToString());
 		WindowBackdrop.SetImmersiveDark((Window)(object)this, dark);
+		// v2.1：容器模块自带调色板，换浅/深两份字典（DynamicResource 会自己刷新，
+		// 不需要重建 WslcView；未创建的容器页这里会跳过，创建时再补一次）。
+		Wslc.Helpers.ThemeSwitcher.Apply(dark);
 	}
 
 	private void SetupTray()
@@ -923,48 +643,48 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IComponentConn
 		_tray = new NotifyIcon
 		{
 			Icon = AppIcon.MakeIcon(),
-			Text = "WSL 状态管理器",
+			Text = "WSL 管理器",
 			Visible = true
 		};
 		ContextMenuStrip val = new ContextMenuStrip();
 		ToolStripMenuItem val2 = new ToolStripMenuItem("打开主界面");
-		ToolStripMenuItem val3 = new ToolStripMenuItem("全部开机");
-		ToolStripMenuItem val4 = new ToolStripMenuItem("全部关机");
 		ToolStripMenuItem val5 = new ToolStripMenuItem("退出");
 		((ToolStripItem)val2).Font = new Font(((ToolStripItem)val2).Font, (FontStyle)1);
 		((ToolStripItem)val2).Click += [SpecialName] (object a0, EventArgs a1) =>
 		{
 			ShowMainWindow();
 		};
-		((ToolStripItem)val3).Click += [SpecialName] (object a0, EventArgs a1) =>
-		{
-			_Lambda_0024__86_002D1();
-		};
-		((ToolStripItem)val4).Click += [SpecialName] (object a0, EventArgs a1) =>
-		{
-			_Lambda_0024__86_002D2();
-		};
 		((ToolStripItem)val5).Click += [SpecialName] (object a0, EventArgs a1) =>
 		{
 			ReallyExit();
 		};
 		((ToolStrip)val).Items.Add((ToolStripItem)(object)val2);
-		((ToolStrip)val).Items.Add((ToolStripItem)new ToolStripSeparator());
-		((ToolStrip)val).Items.Add((ToolStripItem)(object)val3);
-		((ToolStrip)val).Items.Add((ToolStripItem)(object)val4);
+
+		// ── v2.4 菜单瘦身 ─────────────────────────────────────────────
+		// 删掉：全部开机 / 全部关机（与发行版页的「全部开机·关机」重复）、
+		// 内存占用显示、立即释放内存、低内存模式开关。
+		// 低内存默认化：TrimWorkingSetIfEnabled 的自动回收（首帧后 / 切模块 / 隐藏到托盘）
+		// 是默认行为，不受菜单删除影响；软件渲染的手动开关不再提供（渲染模式仍可由
+		// settings.ini 的 RenderMode=Software 或环境变量 WSLMGR_RENDER 指定，文档路径保留）。
 		((ToolStrip)val).Items.Add((ToolStripItem)new ToolStripSeparator());
 		((ToolStrip)val).Items.Add((ToolStripItem)(object)val5);
 		_tray.ContextMenuStrip = val;
 		_tray.MouseDoubleClick += Tray_MouseDoubleClick;
 	}
 
-	private void UpdateTrayIcon()
+	/// <summary>
+	/// 托盘图标/文案跟随发行版运行状态（v2.2：数据源从宿主搬到容器视图的发行版页）。
+	/// 由 <see cref="EnsureWslcView"/> 订阅 DistroRunningChanged 驱动，只在状态真变时更新。
+	/// </summary>
+	private void UpdateTrayIcon(int runningDistros)
 	{
 		if (_tray != null)
 		{
-			bool flag = _distros.Any([SpecialName] (DistroViewModel d) => d.IsRunning);
-			_tray.Icon = AppIcon.MakeIcon(flag);
-			_tray.Text = (flag ? ("WSL 状态管理器 — " + Conversions.ToString(_distros.AsEnumerable().Count([SpecialName] (DistroViewModel d) => d.IsRunning)) + " 个运行中") : "WSL 状态管理器 — 全部已停止");
+			bool running = runningDistros > 0;
+			_tray.Icon = AppIcon.MakeIcon(running);
+			_tray.Text = running
+				? "WSL 管理器 — " + runningDistros + " 个运行中"
+				: "WSL 管理器 — 全部已停止";
 		}
 	}
 
@@ -988,6 +708,43 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IComponentConn
 		Application.Current.Shutdown();
 	}
 
+	/// <summary>
+	/// 内存实验专用：真正销毁窗口（进程靠 App.xaml 的 OnExplicitShutdown 继续存活）。
+	/// 用来验证「隐藏 ≠ 销毁」这个假设——若销毁后工作集掉回首启水平，
+	/// 就说明一直挂着的 180MB 是渲染栈（D3D device + 显卡驱动工作集）。
+	/// </summary>
+	internal void DestroyWindowForTest(bool trim = false)
+	{
+		try
+		{
+			_reallyExit = true;
+			if (_tray != null)
+			{
+				_tray.Visible = false;
+				((Component)(object)_tray).Dispose();
+				_tray = null;
+			}
+			((Window)this).Close();
+			SimpleLog.Write("内存实验：窗口已 Close()，trim=" + trim);
+
+			if (trim)
+			{
+				GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+				GC.WaitForPendingFinalizers();
+				GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+				using (System.Diagnostics.Process proc = System.Diagnostics.Process.GetCurrentProcess())
+				{
+					EmptyWorkingSet(proc.Handle);
+				}
+				SimpleLog.Write("内存实验：已 GC + EmptyWorkingSet");
+			}
+		}
+		catch (Exception ex)
+		{
+			try { SimpleLog.Write("内存实验销毁窗口失败：" + ex.Message); } catch { }
+		}
+	}
+
 	private void Tray_MouseDoubleClick(object sender, MouseEventArgs e)
 	{
 		//IL_0001: Unknown result type (might be due to invalid IL or missing references)
@@ -996,19 +753,5 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IComponentConn
 		{
 			ShowMainWindow();
 		}
-	}
-
-	[SpecialName]
-	[CompilerGenerated]
-	private void _Lambda_0024__86_002D1()
-	{
-		DoStartAll(null);
-	}
-
-	[SpecialName]
-	[CompilerGenerated]
-	private void _Lambda_0024__86_002D2()
-	{
-		DoStopAll(null);
 	}
 }

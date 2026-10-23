@@ -1,0 +1,1523 @@
+﻿<UserControl x:Class="WslManager.Wslc.WslcView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:h="clr-namespace:WslManager.Wslc.Helpers"
+        Background="Transparent"
+        FontFamily="Microsoft YaHei UI" FontSize="13.5"
+        UseLayoutRounding="True" SnapsToDevicePixels="True">
+    <!-- 本视图由 WSL 管理器主窗口（WslManager.UI.MainWindow）承载：
+         标题栏、窗口边框、最小化/最大化/关闭、托盘都由宿主负责，这里只保留页面内容。
+         配色（v2.1）：Styles.xaml 只放样式，颜色来自同目录的 Palette.Light/Dark.xaml，
+         宿主切主题时由 Helpers/ThemeSwitcher 替换这份字典，不需要重建本视图。 -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/Wslc/Themes/Palette.Light.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/Wslc/Themes/Styles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        <h:BrushKeyConverter x:Key="BrushKeyConv"/>
+        <h:BoolToVisibilityConverter x:Key="BoolVisConv"/>
+        <h:NonEmptyToVisibilityConverter x:Key="NonEmptyVisConv"/>
+        <h:ZeroToVisibilityConverter x:Key="ZeroVisConv"/>
+
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource ThinScrollBar}"/>
+
+        <!-- 左侧导航项。图标字形放在 Tag 上（Segoe MDL2 Assets，Windows 自带），
+             不用额外附加属性 —— 少一套依赖，也便于将来换图标只改一处。 -->
+        <Style x:Key="NavItem" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource SubTextBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="bg" Background="Transparent" CornerRadius="8"
+                                Margin="8,2" Padding="12,11">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="3"/>
+                                    <ColumnDefinition Width="24"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border x:Name="bar" Grid.Column="0" Width="3" Height="17"
+                                        CornerRadius="2" Background="Transparent"
+                                        VerticalAlignment="Center"/>
+                                <TextBlock x:Name="ico" Grid.Column="1" Text="{TemplateBinding Tag}"
+                                           FontFamily="Segoe MDL2 Assets" FontSize="15"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{TemplateBinding Foreground}"/>
+                                <ContentPresenter Grid.Column="2" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource AccentSoftBrush}"/>
+                                <Setter TargetName="bar" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                    <Condition Property="IsChecked" Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 细进度条 -->
+        <Style x:Key="SlimBar" TargetType="ProgressBar">
+            <Setter Property="Height" Value="5"/>
+            <Setter Property="Maximum" Value="100"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid>
+                            <Border Background="{DynamicResource BorderSoftBrush}" CornerRadius="3"/>
+                            <Border x:Name="PART_Track"/>
+                            <Border x:Name="PART_Indicator" HorizontalAlignment="Left"
+                                    Background="{DynamicResource AccentBrush}" CornerRadius="3"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 表格行内操作按钮（紧凑） -->
+        <Style x:Key="RowButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+            <Setter Property="Padding" Value="8,3"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="MinWidth" Value="0"/>
+        </Style>
+        <Style x:Key="RowDangerButton" TargetType="Button" BasedOn="{StaticResource RowButton}">
+            <Setter Property="Foreground" Value="{DynamicResource ErrBrush}"/>
+        </Style>
+
+        <!-- 右键复制单元格。
+             ⚠ 处理器必须挂在**单元格**上（而不是祖先 DataGrid）：`MouseRightButtonUp`
+               是 Direct 路由事件，框架在处理冒泡的 Mouse.MouseUp 时会在路由上每个
+               UIElement 上逐个重发，挂单元格才与真实点击路径一致。 -->
+        <Style x:Key="CopyCell" TargetType="DataGridCell" BasedOn="{StaticResource GridCell}">
+            <EventSetter Event="MouseRightButtonUp" Handler="OnContainerCellRightClick"/>
+        </Style>
+
+        <Style x:Key="Dot" TargetType="Ellipse">
+            <Setter Property="Width" Value="9"/>
+            <Setter Property="Height" Value="9"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- v2.4：环境检查改成弹出卡片（Wslc/Dialogs/EnvCheckDialog.xaml），
+             「状态色」样式随模板一起搬过去了，这里不再需要。 -->
+
+        <Style x:Key="ToolButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+            <Setter Property="Padding" Value="13,6"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+        </Style>
+
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+
+        <Style x:Key="KeyText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="ValText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <!-- 分层底色：v0.9.3 把它画在窗口根上（深色下 底最暗 → 卡片次之 → 悬停最亮），
+         并入宿主后窗口由主程序画，这里必须自己补一份，否则深色下卡片 #1E2228
+         会比如今透出的宿主底 #202023 还暗，卡片看着像"凹进去的洞"。
+         v2.3：本视图铺满整个窗口（宿主标题栏改成透明浮层），所以四角都取 8
+         = 宿主 RootBorder 的 9 减去 1px 描边，避免把圆角边框盖成直角。 -->
+    <Border SnapsToDevicePixels="True"
+            Background="{DynamicResource WindowGradient}"
+            CornerRadius="8">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 主体 -->
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="182"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Background="Transparent">
+                <!-- v2.3：宿主标题栏是浮层，顶部让出 42px（42 = 标题栏高）再 +6 视觉留白 -->
+                <StackPanel Margin="0,48,0,0">
+                    <RadioButton x:Name="NavEnv" Style="{StaticResource NavItem}" GroupName="nav"
+                                 Tag="&#xE90F;" Content="环境与安装" IsChecked="True" Checked="OnNavChanged"/>
+                    <!-- v2.2：WSL 发行版管理从独立模块并入这里，位置按使用顺序排在环境之后 -->
+                    <RadioButton x:Name="NavDistro" Style="{StaticResource NavItem}" GroupName="nav"
+                                 Tag="&#xE8F1;" Content="发行版管理" Checked="OnNavChanged"/>
+                    <RadioButton x:Name="NavContainer" Style="{StaticResource NavItem}" GroupName="nav"
+                                 Tag="&#xE7B8;" Content="容器管理" Checked="OnNavChanged"/>
+                    <RadioButton x:Name="NavImage" Style="{StaticResource NavItem}" GroupName="nav"
+                                 Tag="&#xE958;" Content="镜像管理" Checked="OnNavChanged"/>
+                    <RadioButton x:Name="NavNetwork" Style="{StaticResource NavItem}" GroupName="nav"
+                                 Tag="&#xE839;" Content="容器网络管理" Checked="OnNavChanged"/>
+                    <RadioButton x:Name="NavBackup" Style="{StaticResource NavItem}" GroupName="nav"
+                                 Tag="&#xE8E5;" Content="备份与清理" Checked="OnNavChanged"/>
+                    <RadioButton x:Name="NavSettings" Style="{StaticResource NavItem}" GroupName="nav"
+                                 Tag="&#xE713;" Content="设置与加速" Checked="OnNavChanged"/>
+                </StackPanel>
+            </Border>
+
+            <Grid Grid.Column="1" Margin="18,48,18,10">
+
+                <!-- ① 环境与安装（v2.4：环境检查改弹出卡片）
+                     主模块 = 「WSL 环境信息」：版本 / 内核 / 默认发行版 / 容器与镜像数 / 两条虚拟磁盘路径。
+                     「环境检查」按钮打开弹出卡片（Wslc/Dialogs/EnvCheckDialog.xaml）跑逐项检查；
+                     页面自身只留状态摘要与结果小字，不再铺检查明细。
+                     下方 = 「WSL 升级」（只留升级动作，按钮上不再印命令行）+ 执行日志。 -->
+                <Grid x:Name="PanelEnv" Visibility="Visible">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- ── 主模块：WSL 环境信息 ── -->
+                    <Border Grid.Row="0" Style="{StaticResource Card}" Padding="18,16">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- 顶部：状态摘要（左）+ 环境检查（右） -->
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse x:Name="ElpEnv" Style="{StaticResource Dot}"/>
+                                        <TextBlock x:Name="TxtEnvSummary" Margin="8,0,0,0"
+                                                   FontSize="15.5" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextBrush}"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TxtEnvDetail" Margin="17,6,0,0" FontSize="12.5"
+                                               Foreground="{DynamicResource SubTextBrush}"
+                                               TextWrapping="Wrap" LineHeight="19"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock x:Name="TxtEnvCheckBrief" FontSize="12" VerticalAlignment="Center"
+                                               Margin="0,0,12,0"
+                                               Foreground="{DynamicResource MutedBrush}"/>
+                                    <Button x:Name="BtnEnvCheck" Style="{StaticResource PrimaryButton}"
+                                            Content="环境检查" Click="OnEnvCheckClick"
+                                            ToolTip="重新检测运行环境，并展开逐项检查明细（可单项或一键修复）"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Grid.Row="1" Height="1" Margin="0,14,0,12"
+                                    Background="{DynamicResource BorderSoftBrush}"/>
+
+                            <!-- ── 信息网格：前三行是短值（三组键值），后面三条路径各占一整行 ── -->
+                            <Grid Grid.Row="2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="26"/>
+                                    <RowDefinition Height="26"/>
+                                    <RowDefinition Height="26"/>
+                                    <RowDefinition Height="26"/>
+                                    <RowDefinition Height="26"/>
+                                    <RowDefinition Height="26"/>
+                                    <RowDefinition Height="26"/>
+                                    <RowDefinition Height="26"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="WSL 版本" Style="{StaticResource KeyText}"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="TxtVerWsl" Style="{StaticResource ValText}"/>
+                                <TextBlock Grid.Row="0" Grid.Column="2" Text="内核版本" Style="{StaticResource KeyText}"/>
+                                <TextBlock Grid.Row="0" Grid.Column="3" x:Name="TxtVerKernel" Style="{StaticResource ValText}"/>
+                                <TextBlock Grid.Row="0" Grid.Column="4" Text="默认发行版" Style="{StaticResource KeyText}"/>
+                                <TextBlock Grid.Row="0" Grid.Column="5" x:Name="TxtVerDistro" Style="{StaticResource ValText}"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="容器数量" Style="{StaticResource KeyText}"/>
+                                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="TxtVerContainers" Style="{StaticResource ValText}"/>
+                                <TextBlock Grid.Row="1" Grid.Column="2" Text="镜像数量" Style="{StaticResource KeyText}"/>
+                                <TextBlock Grid.Row="1" Grid.Column="3" x:Name="TxtVerImages" Style="{StaticResource ValText}"/>
+                                <TextBlock Grid.Row="1" Grid.Column="4" Text="wslc 版本" Style="{StaticResource KeyText}"/>
+                                <TextBlock Grid.Row="1" Grid.Column="5" x:Name="TxtVerWslcVer" Style="{StaticResource ValText}"/>
+
+                                <!-- 路径行：值占 1~4 列，行尾给一个「复制」按钮。
+                                     路径一律省略号显示，全值只在 ToolTip 与剪贴板里，
+                                     所以必须给复制入口 —— 否则用户只能手打一长串。
+                                     v2.0 补齐三条排障最常被索要的路径：wslc 数据目录（真实值，
+                                     来自 wslc info 的 settings.yaml 父目录）、运行日志、默认发行版共享路径。 -->
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="WSL 虚拟磁盘" Style="{StaticResource KeyText}"/>
+                                <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="4" x:Name="TxtVerWslDisk"
+                                           Style="{StaticResource ValText}"/>
+                                <Button Grid.Row="2" Grid.Column="5" Style="{StaticResource RowButton}" Margin="0"
+                                        HorizontalAlignment="Right" Content="复制"
+                                        ToolTip="复制 WSL 虚拟磁盘路径"
+                                        Click="OnCopyWslDiskPathClick"/>
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="wslc 数据目录" Style="{StaticResource KeyText}"/>
+                                <TextBlock Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="4" x:Name="TxtVerWslcDataDir"
+                                           Style="{StaticResource ValText}"/>
+                                <Button Grid.Row="3" Grid.Column="5" Style="{StaticResource RowButton}" Margin="0"
+                                        HorizontalAlignment="Right" Content="复制"
+                                        ToolTip="复制 wslc 数据目录（wslc info 里设置文件的父目录）"
+                                        Click="OnCopyWslcDataDirClick"/>
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="wslc 虚拟磁盘" Style="{StaticResource KeyText}"/>
+                                <TextBlock Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="4" x:Name="TxtVerWslcDisk"
+                                           Style="{StaticResource ValText}"/>
+                                <Button Grid.Row="4" Grid.Column="5" Style="{StaticResource RowButton}" Margin="0"
+                                        HorizontalAlignment="Right" Content="复制"
+                                        ToolTip="复制 wslc 虚拟磁盘路径"
+                                        Click="OnCopyWslcDiskPathClick"/>
+
+                                <TextBlock Grid.Row="5" Grid.Column="0" Text="wslc 路径" Style="{StaticResource KeyText}"/>
+                                <TextBlock Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="4" x:Name="TxtVerWslcPath"
+                                           Style="{StaticResource ValText}"/>
+                                <Button Grid.Row="5" Grid.Column="5" Style="{StaticResource RowButton}" Margin="0"
+                                        HorizontalAlignment="Right" Content="复制"
+                                        ToolTip="复制 wslc.exe 的完整路径"
+                                        Click="OnCopyWslcPathClick"/>
+
+                                <TextBlock Grid.Row="6" Grid.Column="0" Text="运行日志" Style="{StaticResource KeyText}"/>
+                                <TextBlock Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="4" x:Name="TxtVerLogPath"
+                                           Style="{StaticResource ValText}"/>
+                                <Button Grid.Row="6" Grid.Column="5" Style="{StaticResource RowButton}" Margin="0"
+                                        HorizontalAlignment="Right" Content="复制"
+                                        ToolTip="复制运行日志文件路径"
+                                        Click="OnCopyLogPathClick"/>
+
+                                <TextBlock Grid.Row="7" Grid.Column="0" Text="发行版共享路径" Style="{StaticResource KeyText}"/>
+                                <TextBlock Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="4" x:Name="TxtVerSharePath"
+                                           Style="{StaticResource ValText}"/>
+                                <Button Grid.Row="7" Grid.Column="5" Style="{StaticResource RowButton}" Margin="0"
+                                        HorizontalAlignment="Right" Content="复制"
+                                        ToolTip="复制默认发行版的 \\wsl$ 共享路径"
+                                        Click="OnCopySharePathClick"/>
+                            </Grid>
+                        </Grid>
+                    </Border>
+
+                    <!-- ── 下半区：WSL 升级（左）+ 执行日志（右） ── -->
+                    <Grid Grid.Row="1" Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="366"/>
+                            <ColumnDefinition Width="14"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Style="{StaticResource Card}" Padding="16,14">
+                            <StackPanel>
+                                <TextBlock Text="WSL 升级" Style="{StaticResource SectionTitle}"/>
+                                <TextBlock FontSize="12.5" TextWrapping="Wrap" LineHeight="19"
+                                           Foreground="{DynamicResource SubTextBrush}"
+                                           Text="wslc 随 WSL 2.9.3 及以上版本提供；升级一律走微软官方渠道，下载约 350 MB。"/>
+
+                                <!-- 按钮文字不再带命令行（wsl update 之类），命令只在日志里出现 -->
+                                <Button Style="{StaticResource PrimaryButton}" Margin="0,12,0,0"
+                                        HorizontalAlignment="Stretch"
+                                        Content="更新到最新稳定版" Click="OnWslUpdateStableClick"/>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" Style="{StaticResource GhostButton}" HorizontalAlignment="Stretch"
+                                            Padding="10,7" Content="更新到预览版" Click="OnWslUpdatePreClick"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GhostButton}" HorizontalAlignment="Stretch"
+                                            Padding="10,7" Content="从安装包升级…" Click="OnInstallFromFileClick"
+                                            ToolTip="选一个微软官方的 .msi / .msix 安装包，静默升级"/>
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" Style="{StaticResource GhostButton}" HorizontalAlignment="Stretch"
+                                            Padding="10,7" Content="打开 Microsoft Store" Click="OnOpenStoreClick"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GhostButton}" HorizontalAlignment="Stretch"
+                                            Padding="10,7" Content="打开官方发布页" Click="OnOpenReleaseClick"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Column="2" Style="{StaticResource Card}" Padding="16,14">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <Grid Grid.Row="0" Margin="0,0,0,10">
+                                    <TextBlock Text="执行日志" Style="{StaticResource SectionTitle}" Margin="0"/>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <Button Style="{StaticResource ToolButton}" Content="复制" Click="OnCopyLogClick"/>
+                                        <Button Style="{StaticResource ToolButton}" Margin="0" Content="清空"
+                                                Click="OnClearLogClick"/>
+                                    </StackPanel>
+                                </Grid>
+                                <TextBox x:Name="TxtLog" Grid.Row="1" IsReadOnly="True" IsReadOnlyCaretVisible="False"
+                                         Background="{DynamicResource LogBgBrush}"
+                                         BorderBrush="{DynamicResource BorderSoftBrush}"
+                                         BorderThickness="1" Padding="12,10"
+                                         FontFamily="Consolas, Microsoft YaHei UI" FontSize="12.5"
+                                         TextWrapping="NoWrap" AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                         Foreground="{DynamicResource TextBrush}"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+
+                <!-- ② 发行版管理（v2.2：原「发行版」独立模块并入本模块，功能与 v2.1 一致） -->
+                <Grid x:Name="PanelDistro" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,2,0,12">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource PrimaryButton}" Content="安装发行版"
+                                    Click="OnInstallDistroClick"/>
+                            <Button Style="{StaticResource ToolButton}" Margin="8,0,0,0" Content="全部开机"
+                                    Click="OnDistroStartAllClick"/>
+                            <Button Style="{StaticResource ToolButton}" Content="全部关机"
+                                    Click="OnDistroStopAllClick"/>
+                            <Button Style="{StaticResource ToolButton}" Content="卸载发行版"
+                                    Click="OnUninstallDistroClick"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtDistroSummary" VerticalAlignment="Center" Margin="0,0,12,0"
+                                       FontSize="12.5" Foreground="{DynamicResource MutedBrush}"
+                                       Text="正在读取状态…"/>
+                            <Button Style="{StaticResource ToolButton}" Content="刷新"
+                                    Click="OnDistroRefreshClick"/>
+                            <CheckBox x:Name="ChkDistroAutoRefresh" Style="{StaticResource ModernCheckBox}"
+                                      Content="自动刷新" IsChecked="True" Margin="4,0,0,0"
+                                      ToolTip="每 5 秒自动读取一次发行版状态"
+                                      Checked="OnDistroAutoRefreshChanged"
+                                      Unchecked="OnDistroAutoRefreshChanged"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <ProgressBar x:Name="BarDistroBusy" Grid.Row="1" Height="2" IsIndeterminate="True"
+                                 Background="Transparent" BorderThickness="0" Margin="0,0,0,8"
+                                 Foreground="{DynamicResource AccentBrush}" Visibility="Collapsed"/>
+
+                    <Grid Grid.Row="2">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl x:Name="ListDistros">
+                                <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Style="{StaticResource Card}" Padding="14,12" Margin="0,0,0,8">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <Ellipse Grid.Column="0" Width="9" Height="9" VerticalAlignment="Center">
+                                                        <Ellipse.Style>
+                                                            <Style TargetType="Ellipse">
+                                                                <Setter Property="Fill" Value="{DynamicResource MutedBrush}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                                        <Setter Property="Fill" Value="{DynamicResource OkBrush}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Ellipse.Style>
+                                                    </Ellipse>
+
+                                                    <StackPanel Grid.Column="1" Margin="12,0,10,0" VerticalAlignment="Center">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="{Binding Name}" FontSize="14.5" FontWeight="SemiBold"
+                                                                       Foreground="{DynamicResource TextBrush}"
+                                                                       VerticalAlignment="Center"/>
+                                                            <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="4"
+                                                                    Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center"
+                                                                    Visibility="{Binding IsDefault, Converter={StaticResource BoolVisConv}}">
+                                                                <TextBlock Text="默认" FontSize="11"
+                                                                           Foreground="{DynamicResource AccentBrush}"/>
+                                                            </Border>
+                                                            <Border Background="{DynamicResource HoverBrush}" CornerRadius="4"
+                                                                    Padding="6,1" Margin="6,0,0,0" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding VersionText}" FontSize="11"
+                                                                           Foreground="{DynamicResource MutedBrush}"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                        <TextBlock Text="{Binding StatusText}" FontSize="12" Margin="0,4,0,0"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   Foreground="{DynamicResource SubTextBrush}"/>
+                                                    </StackPanel>
+
+                                                    <!-- v2.4 加、v2.5 修：CPU / 内存利用率，卡片正中两行。
+                                                         数据来自 WslStat（发行版内读 /proc）—— 旧实现读 Vmmem
+                                                         进程的 TotalProcessorTime 被系统拒绝，整段静默失败，
+                                                         卡片正中一片空白。仍是虚拟机级读数（发行版共享一台
+                                                         VM），完整数值与说明在 UsageTip 里。 -->
+                                                    <!-- 跨列居中：卡片右侧那串按钮很宽，放在单独的 Auto 列里视觉上永远偏右。
+                                                         IsHitTestVisible=False 让点击穿透，不影响按钮。 -->
+                                                    <!-- v2.5.1：两行**同字号同字重**（原先 12.5 半粗 / 11.5 常规，看着像两套字体），
+                                                         且**只有百分比数字变色**，标签（CPU / 内存）保持次要色：
+                                                         <60% 绿（OkBrush）· 60~85% 黄（WarnBrush）· ≥85% 红（ErrBrush）。
+                                                         档位由 UsageCpuLevel / UsageMemLevel 给出，颜色走 DynamicResource，
+                                                         浅色/深色各有一套高对比取值。
+
+                                                         对齐：两行放进**同一个 Grid**，标签列与数值列各自共享列宽 ——
+                                                         标签右对齐、数值左对齐，于是「CPU 9%」「内存 9%」的数字左边缘严格对齐。
+                                                         早先用两个独立 StackPanel 各自居中，两行中心对齐但数字错位（实测差 3 px 量级，
+                                                         肉眼一眼看出"没对齐"）。 -->
+                                                    <StackPanel x:Name="UsagePanel" Grid.Column="0" Grid.ColumnSpan="3"
+                                                                Panel.ZIndex="1" IsHitTestVisible="False"
+                                                                VerticalAlignment="Center"
+                                                                HorizontalAlignment="Center"
+                                                                ToolTip="{Binding UsageTip}">
+                                                        <StackPanel.Resources>
+                                                            <!-- 数值段：只有这一段按档位换色（标签不换） -->
+                                                            <Style x:Key="UsageCpuValueStyle" TargetType="TextBlock">
+                                                                <Setter Property="FontSize" Value="12.5"/>
+                                                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding UsageCpuLevel}" Value="ok">
+                                                                        <Setter Property="Foreground" Value="{DynamicResource OkBrush}"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding UsageCpuLevel}" Value="warn">
+                                                                        <Setter Property="Foreground" Value="{DynamicResource WarnBrush}"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding UsageCpuLevel}" Value="danger">
+                                                                        <Setter Property="Foreground" Value="{DynamicResource ErrBrush}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                            <Style x:Key="UsageMemValueStyle" TargetType="TextBlock">
+                                                                <Setter Property="FontSize" Value="12.5"/>
+                                                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding UsageMemLevel}" Value="ok">
+                                                                        <Setter Property="Foreground" Value="{DynamicResource OkBrush}"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding UsageMemLevel}" Value="warn">
+                                                                        <Setter Property="Foreground" Value="{DynamicResource WarnBrush}"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding UsageMemLevel}" Value="danger">
+                                                                        <Setter Property="Foreground" Value="{DynamicResource ErrBrush}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                            <!-- 标签段：与数值同字号同字重，只有颜色不同 -->
+                                                            <Style x:Key="UsageLabelStyle" TargetType="TextBlock">
+                                                                <Setter Property="FontSize" Value="12.5"/>
+                                                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource SubTextBrush}"/>
+                                                                <Setter Property="HorizontalAlignment" Value="Right"/>
+                                                            </Style>
+                                                        </StackPanel.Resources>
+
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+
+                                                            <TextBlock x:Name="UsageCpuLabel" Grid.Row="0" Grid.Column="0"
+                                                                       Text="CPU" Style="{StaticResource UsageLabelStyle}"/>
+                                                            <TextBlock x:Name="UsageCpuValue" Grid.Row="0" Grid.Column="1"
+                                                                       Text="{Binding UsageCpuValue}"
+                                                                       Style="{StaticResource UsageCpuValueStyle}"
+                                                                       Margin="6,0,0,0"/>
+
+                                                            <TextBlock x:Name="UsageMemLabel" Grid.Row="1" Grid.Column="0"
+                                                                       Text="内存" Style="{StaticResource UsageLabelStyle}"
+                                                                       Margin="0,2,0,0"/>
+                                                            <TextBlock x:Name="UsageMemValue" Grid.Row="1" Grid.Column="1"
+                                                                       Text="{Binding UsageMemValue}"
+                                                                       Style="{StaticResource UsageMemValueStyle}"
+                                                                       Margin="6,2,0,0"/>
+                                                        </Grid>
+                                                    </StackPanel>
+
+                                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Button Style="{StaticResource RowButton}" Content="开机"
+                                                            Tag="{Binding Name}" IsEnabled="{Binding CanStart}"
+                                                            Click="OnDistroStartClick"/>
+                                                    <Button Style="{StaticResource RowButton}" Content="关机"
+                                                            Tag="{Binding Name}" IsEnabled="{Binding CanStop}"
+                                                            Click="OnDistroStopClick"/>
+                                                    <Button Style="{StaticResource RowButton}" Content="重启"
+                                                            Tag="{Binding Name}" IsEnabled="{Binding CanStop}"
+                                                            Click="OnDistroRestartClick"/>
+                                                    <Button Style="{StaticResource RowButton}" Content="终端"
+                                                            Tag="{Binding Name}" Click="OnDistroTerminalClick"/>
+                                                    <Button Style="{StaticResource RowButton}" Content="文件"
+                                                            Tag="{Binding Name}" Click="OnDistroFilesClick"/>
+                                                    <Button Style="{StaticResource RowButton}" Content="更多" Margin="0"
+                                                            Tag="{Binding Name}" Click="OnDistroMoreClick">
+                                                        <Button.ContextMenu>
+                                                            <ContextMenu>
+                                                                <MenuItem Header="设为默认发行版" Click="OnDistroSetDefaultClick"/>
+                                                                <MenuItem Header="复制 IP 地址" Click="OnDistroCopyIpClick"/>
+                                                                <MenuItem Header="复制发行版名称" Click="OnDistroCopyNameClick"/>
+                                                                <Separator/>
+                                                                <MenuItem Header="强制关机（不等待软关机）"
+                                                                          ToolTip="直接执行 wsl -t，跳过发行版内的关机流程"
+                                                                          Click="OnDistroForceStopClick"/>
+                                                                <Separator/>
+                                                                <MenuItem Header="卸载该发行版" Click="OnDistroUninstallItemClick"/>
+                                                            </ContextMenu>
+                                                        </Button.ContextMenu>
+                                                    </Button>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+
+                        <StackPanel x:Name="DistroEmpty" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                    Visibility="Collapsed">
+                            <TextBlock Text="未检测到 WSL 发行版" FontSize="15" FontWeight="SemiBold"
+                                       HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource TextBrush}"/>
+                            <TextBlock Text="装上 WSL 运行时后，用上面的「安装发行版」选一个即可。"
+                                       FontSize="12.5" Margin="0,8,0,0" TextAlignment="Center"
+                                       HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource SubTextBrush}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,2,0">
+                        <TextBlock x:Name="TxtDistroWslVersion" FontSize="11.5" VerticalAlignment="Center"
+                                   Margin="0,0,14,0" Foreground="{DynamicResource MutedBrush}"/>
+                        <TextBlock x:Name="TxtDistroUpdated" FontSize="11.5" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource MutedBrush}"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- ③ 容器管理（已合并性能监控） -->
+                <Grid x:Name="PanelContainer" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,2,0,12">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource PrimaryButton}" Content="新建容器"
+                                    Click="OnCreateContainerClick"/>
+                            <Button Style="{StaticResource ToolButton}" Margin="8,0,0,0"
+                                    Content="刷新" Click="OnRefreshContainersClick"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtSelectedCount" VerticalAlignment="Center" Margin="0,0,12,0"
+                                       FontSize="12.5" Foreground="{DynamicResource MutedBrush}"
+                                       Text="未选择容器"/>
+                            <Button x:Name="BtnBatchStart" Style="{StaticResource ToolButton}" Content="批量启动"
+                                    Click="OnBatchStartClick"/>
+                            <Button x:Name="BtnBatchStop" Style="{StaticResource ToolButton}" Content="批量停止"
+                                    ToolTip="优雅停止选中的所有容器"
+                                    Click="OnBatchStopClick"/>
+                            <Button x:Name="BtnBatchKill" Style="{StaticResource RowDangerButton}"
+                                    Padding="13,6" ToolTip="立即强制终止选中的所有容器"
+                                    Content="批量强制" Click="OnBatchKillClick"/>
+                            <Button x:Name="BtnBatchRestart" Style="{StaticResource ToolButton}" Margin="8,0,8,0"
+                                    Content="批量重启" Click="OnBatchRestartClick"/>
+                            <Button x:Name="BtnBatchRemove" Style="{StaticResource RowDangerButton}"
+                                    Padding="13,6" Margin="0" Content="批量删除" Click="OnBatchRemoveClick"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Border Grid.Row="1" Style="{StaticResource Card}" Padding="2">
+                        <Grid>
+                            <!-- 行间分割线：由 ModernDataGrid 统一定义（GridLinesVisibility=Horizontal +
+                                 极浅的 BorderSoftBrush #E7EBF2）。这里**不要再写 GridLinesVisibility="None"** ——
+                                 局部值优先级高于样式，会把共享样式里的分割线整条抹掉。 -->
+                            <DataGrid x:Name="GridContainers" Style="{StaticResource ModernDataGrid}"
+                                      AutoGenerateColumns="False" IsReadOnly="False"
+                                      HeadersVisibility="Column" CanUserAddRows="False"
+                                      SelectionMode="Single" SelectionUnit="FullRow"
+                                      RowHeight="46"
+                                      CanUserSortColumns="False"
+                                      CanUserReorderColumns="False"
+                                      CanUserResizeColumns="False"
+                                      ColumnWidth="SizeToHeader"
+                                      SelectionChanged="OnContainerSelectionChanged">
+                                <DataGrid.Columns>
+                                    <DataGridTemplateColumn Width="46" CanUserSort="False">
+                                        <DataGridTemplateColumn.HeaderTemplate>
+                                            <DataTemplate>
+                                                <CheckBox x:Name="ChkAll" Style="{StaticResource ModernCheckBox}"
+                                                          HorizontalAlignment="Center"
+                                                          Checked="OnSelectAllChecked" Unchecked="OnSelectAllChecked"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.HeaderTemplate>
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <CheckBox Style="{StaticResource ModernCheckBox}"
+                                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                          IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                          Checked="OnRowCheckChanged" Unchecked="OnRowCheckChanged"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <!-- 名称缩窄；太长可点开看全称，悬浮也有提示 -->
+                                    <DataGridTemplateColumn Header="容器名称" Width="110" CanUserSort="False"
+                                                            CellStyle="{StaticResource CopyCell}">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Name}" ToolTip="{Binding Name}"
+                                                           VerticalAlignment="Center" FontSize="12.5"
+                                                           Cursor="Hand"
+                                                           Foreground="{DynamicResource TextBrush}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           MouseLeftButtonUp="OnNameClick"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Header="状态" Width="92" CanUserSort="False">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding StateGlyph}" FontSize="14"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="{Binding StateBrushKey, Converter={StaticResource BrushKeyConv}}"/>
+                                                    <TextBlock Text="{Binding StateText}" Margin="7,0,0,0"
+                                                               FontSize="12.5" VerticalAlignment="Center"
+                                                               ToolTip="{Binding Status}"
+                                                               Foreground="{Binding StateBrushKey, Converter={StaticResource BrushKeyConv}}"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="镜像" Width="105" CanUserSort="False"
+                                                            CellStyle="{StaticResource CopyCell}">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding ImageShort}" ToolTip="{Binding Image}"
+                                                           VerticalAlignment="Center" FontSize="12.5"
+                                                           Foreground="{DynamicResource SubTextBrush}"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="端口映射" Width="120" CanUserSort="False"
+                                                            CellStyle="{StaticResource CopyCell}">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding PortsShort}" ToolTip="{Binding PortsFull}"
+                                                           VerticalAlignment="Center" FontSize="12"
+                                                           FontFamily="Consolas, Microsoft YaHei UI"
+                                                           Foreground="{DynamicResource SubTextBrush}"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="CPU 利用率" Width="95" CanUserSort="False">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel VerticalAlignment="Center" Margin="0,7" Cursor="Hand"
+                                                            ToolTip="点击查看详情"
+                                                            MouseLeftButtonUp="OnMetricClick">
+                                                    <TextBlock Text="{Binding Cpu}" FontSize="12"
+                                                               Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                                                    <ProgressBar Style="{StaticResource SlimBar}"
+                                                                 Value="{Binding CpuValue, Mode=OneWay}"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <DataGridTemplateColumn Header="内存利用率" Width="105" CanUserSort="False">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel VerticalAlignment="Center" Margin="0,7" Cursor="Hand"
+                                                            ToolTip="{Binding MemDetail}"
+                                                            MouseLeftButtonUp="OnMetricClick">
+                                                    <TextBlock Text="{Binding MemPct}" FontSize="12"
+                                                               Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                                                    <ProgressBar Style="{StaticResource SlimBar}"
+                                                                 Value="{Binding MemValue, Mode=OneWay}"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+                                    <!-- 操作列：运行中的行有 7 个按钮（比已停止的行多一个「强制」），
+                                         实测需按钮 315.2px + 两侧内边距各约 12.4px ≈ 340px。
+                                         给 MinWidth 兜底，避免窗口变窄时操作列被压到裁掉最右侧的「删除」。 -->
+                                    <DataGridTemplateColumn Header="操作" Width="*" MinWidth="342" CanUserSort="False">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Button Style="{StaticResource RowButton}" Content="启动"
+                                                            Visibility="{Binding IsRunning, Converter={StaticResource BoolVisConv}, ConverterParameter=invert}"
+                                                            Click="OnRowStartClick"/>
+                                                    <Button Style="{StaticResource RowButton}" Content="停止"
+                                                            ToolTip="优雅停止：发送 SIGTERM 并等待应用退出（约 8 秒）"
+                                                            Visibility="{Binding IsRunning, Converter={StaticResource BoolVisConv}}"
+                                                            Click="OnRowStopClick"/>
+                                                    <Button Style="{StaticResource RowDangerButton}" Content="强制"
+                                                            ToolTip="强制终止：立即发送 SIGKILL，不等待应用清理"
+                                                            Visibility="{Binding IsRunning, Converter={StaticResource BoolVisConv}}"
+                                                            Click="OnRowKillClick"/>
+                                                    <Button Style="{StaticResource RowButton}" Content="重启"
+                                                            Click="OnRowRestartClick"/>
+                                                    <Button Style="{StaticResource RowButton}" Content="日志"
+                                                            Click="OnRowLogsClick"/>
+                                                    <Button Style="{StaticResource RowButton}" Content="终端"
+                                                            Click="OnRowShellClick"/>
+                                                    <Button Style="{StaticResource RowButton}" Content="详情"
+                                                            Click="OnOpenDetailClick"/>
+                                                    <Button Style="{StaticResource RowDangerButton}" Content="删除"
+                                                            Margin="0" Click="OnRowRemoveClick"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <TextBlock Text="暂无容器，点击「新建容器」开始"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="13"
+                                       Foreground="{DynamicResource MutedBrush}"
+                                       Visibility="{Binding Items.Count, ElementName=GridContainers, Converter={StaticResource ZeroVisConv}}"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,12,0,0" Padding="14,10"
+                            Visibility="{Binding Text, ElementName=TxtContainerLog, Converter={StaticResource NonEmptyVisConv}}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="118"/>
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0" Margin="0,0,0,8">
+                                <TextBlock Text="执行输出" Style="{StaticResource SectionTitle}" Margin="0"/>
+                                <Button Style="{StaticResource ToolButton}" Margin="0,0,6,0" HorizontalAlignment="Right"
+                                        Content="清空" Click="OnClearContainerLogClick"/>
+                            </Grid>
+                            <TextBox x:Name="TxtContainerLog" Grid.Row="1" IsReadOnly="True"
+                                     Background="{DynamicResource LogBgBrush}"
+                                     BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1"
+                                     Padding="12,10" FontFamily="Consolas, Microsoft YaHei UI" FontSize="12.5"
+                                     AcceptsReturn="True" TextWrapping="NoWrap"
+                                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                     Foreground="{DynamicResource TextBrush}"/>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- ③ 镜像管理 -->
+                <Grid x:Name="PanelImage" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,2,0,10">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Background="{DynamicResource CardBrush}" CornerRadius="6"
+                                    BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                                    Width="330" Height="34" Margin="0,0,8,0">
+                                <TextBox x:Name="TxtPullImage" Style="{StaticResource ModernTextBox}"
+                                         BorderThickness="0" Background="Transparent"
+                                         VerticalContentAlignment="Center" Padding="10,0,10,0"
+                                         TextAlignment="Left"
+                                         ToolTip="输入镜像名，例如 alpine:latest 或 nginx:1.27"/>
+                            </Border>
+                            <Button Style="{StaticResource PrimaryButton}" Content="拉取镜像"
+                                    x:Name="BtnPullImage" Click="OnPullImageClick"/>
+                            <Button Style="{StaticResource RowDangerButton}" Margin="8,0,0,0"
+                                    Padding="13,6" Content="停止"
+                                    x:Name="BtnPullStop" Visibility="Collapsed"
+                                    ToolTip="中断正在进行的镜像拉取"
+                                    Click="OnStopPullClick"/>
+                            <Button Style="{StaticResource ToolButton}" Margin="8,0,0,0"
+                                    Content="刷新" Click="OnRefreshImagesClick"/>
+                            <!-- 镜像存档：仓库格式 tar，保留标签（与「备份与清理」的容器文件系统导出不同） -->
+                            <Button Style="{StaticResource ToolButton}" Margin="8,0,0,0"
+                                    Content="导出选中镜像…" Click="OnExportImageClick"
+                                    ToolTip="wslc image save -o：导出为仓库格式 tar，**标签会一起保留**，导入后可直接运行"/>
+                            <Button Style="{StaticResource ToolButton}" Margin="8,0,0,0"
+                                    Content="导入镜像…" Click="OnImportImageClick"
+                                    ToolTip="wslc image load -i：从仓库格式 tar 导入，标签一起恢复"/>
+                            <TextBlock x:Name="TxtPullProgress" VerticalAlignment="Center" Margin="14,0,0,0"
+                                       FontSize="12.5" FontFamily="Consolas, Microsoft YaHei UI"
+                                       Foreground="{DynamicResource AccentBrush}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,10" Padding="14,11">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="从镜像仓库检索" Style="{StaticResource SectionTitle}" Margin="0,0,12,0"/>
+                                <Border Background="{DynamicResource BarBrush}" CornerRadius="6"
+                                        BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                                        Width="380" Height="34">
+                                    <TextBox x:Name="TxtRepoQuery" Style="{StaticResource ModernTextBox}"
+                                             BorderThickness="0" Background="Transparent"
+                                             VerticalContentAlignment="Center" Padding="10,0,10,0"
+                                             TextAlignment="Left"
+                                             ToolTip="输入镜像关键字，例如 nginx、redis、python"
+                                             KeyDown="OnRepoQueryKeyDown"/>
+                                </Border>
+                                <Button Style="{StaticResource PrimaryButton}" Margin="8,0,0,0"
+                                        Padding="16,6" Content="检索" Click="OnRepoSearchClick"/>
+                                <Button Style="{StaticResource ToolButton}" Margin="8,0,0,0"
+                                        Content="浏览器搜索" ToolTip="在浏览器中打开镜像站搜索页（远程 API 不可达时用）"
+                                        Click="OnRepoWebSearchClick"/>
+                                <TextBlock x:Name="TxtSearchStatus" VerticalAlignment="Center" Margin="12,0,0,0"
+                                           FontSize="12.5" Foreground="{DynamicResource MutedBrush}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <ItemsControl x:Name="ListSearchResults" Margin="0,10,0,0">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource GhostButton}" Margin="0,0,8,8"
+                                                Padding="10,6" MaxWidth="300"
+                                                Click="OnSearchResultClick"
+                                                ToolTip="{Binding Description}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding PullName}" FontSize="12.5"
+                                                           Foreground="{DynamicResource TextBrush}"/>
+                                                <TextBlock Text="{Binding StarsText}" FontSize="11.5" Margin="8,0,0,0"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource WarnBrush}"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Row="2" Style="{StaticResource Card}" Padding="2">
+                        <Grid>
+                            <!-- 行间分割线同容器列表：由 ModernDataGrid 统一定义，勿在局部覆盖为 None。 -->
+                            <DataGrid x:Name="GridImages" Style="{StaticResource ModernDataGrid}"
+                                      AutoGenerateColumns="False" IsReadOnly="True"
+                                      HeadersVisibility="Column" CanUserAddRows="False"
+                                      SelectionMode="Single" SelectionUnit="FullRow"
+                                      RowHeight="44"
+                                      CanUserSortColumns="False"
+                                      CanUserReorderColumns="False"
+                                      CanUserResizeColumns="False"
+                                      SelectionChanged="OnImageSelectionChanged">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="仓库" Binding="{Binding Repository}" Width="*"
+                                                        CanUserSort="False"/>
+                                    <DataGridTextColumn Header="标签" Binding="{Binding Tag}" Width="90"
+                                                        CanUserSort="False"/>
+                                    <DataGridTextColumn Header="镜像 ID" Binding="{Binding ShortId}" Width="130"
+                                                        CanUserSort="False"/>
+                                    <DataGridTextColumn Header="大小" Binding="{Binding Size}" Width="95"
+                                                        CanUserSort="False"/>
+                                    <!-- 占用：被容器引用的镜像，wslc 删除时只摘标签不删层
+                                         （不报错、不释放空间）—— 必须先标出来。悬停有完整解释。 -->
+                                    <DataGridTemplateColumn Header="占用" Width="140" CanUserSort="False">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding UsageText}" FontSize="12.5"
+                                                           VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding UsageTip}"
+                                                           Foreground="{Binding UsageBrushKey,
+                                                                       Converter={StaticResource BrushKeyConv}}"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="创建时间" Binding="{Binding Created}" Width="170"
+                                                        CanUserSort="False"/>
+                                    <DataGridTemplateColumn Header="操作" Width="120" CanUserSort="False">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Button Style="{StaticResource RowButton}" Content="删除"
+                                                            Margin="0" Click="OnImageRowRemoveClick"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <TextBlock Text="暂无匹配的本地镜像"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="13"
+                                       Foreground="{DynamicResource MutedBrush}"
+                                       Visibility="{Binding Items.Count, ElementName=GridImages, Converter={StaticResource ZeroVisConv}}"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,12,0,0" Padding="14,10"
+                            Visibility="{Binding Text, ElementName=TxtImageLog, Converter={StaticResource NonEmptyVisConv}}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="120"/>
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0" Margin="0,0,0,8">
+                                <StackPanel Orientation="Horizontal">
+                                    <Button x:Name="BtnImgRun" Style="{StaticResource ToolButton}"
+                                            Content="用选中镜像新建容器" Click="OnImageRunClick"/>
+                                    <Button x:Name="BtnImgRemove" Style="{StaticResource RowDangerButton}"
+                                            Padding="13,6" Margin="0" Content="删除选中镜像" Click="OnImageRemoveClick"/>
+                                </StackPanel>
+                                <Button Style="{StaticResource ToolButton}" Margin="0,0,6,0" HorizontalAlignment="Right"
+                                        Content="清空" Click="OnClearImageLogClick"/>
+                            </Grid>
+                            <TextBox x:Name="TxtImageLog" Grid.Row="1" IsReadOnly="True"
+                                     Background="{DynamicResource LogBgBrush}"
+                                     BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1"
+                                     Padding="12,10" FontFamily="Consolas, Microsoft YaHei UI" FontSize="12.5"
+                                     AcceptsReturn="True" TextWrapping="NoWrap"
+                                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                     Foreground="{DynamicResource TextBrush}"/>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- ④ 容器网络管理 -->
+                <Grid x:Name="PanelNetwork" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Style="{StaticResource Card}" Padding="18,16">
+                        <StackPanel>
+                            <TextBlock Text="创建网络" Style="{StaticResource SectionTitle}"/>
+                            <TextBlock FontSize="12.5" TextWrapping="Wrap" Margin="0,0,0,12" LineHeight="19"
+                                       Foreground="{DynamicResource SubTextBrush}"
+                                       Text="用 wslc network create 建 bridge 网络。网段留空则由 wslc 自行分配；同一台机器上几个网络的网段不要重叠，否则容器会分不到地址。"/>
+
+                            <!-- 两行网格：标签走 Row 0、输入框走 Row 1，按钮也放 Row 1。
+                                 原来按钮跟输入框「底对齐」，但按钮比 34px 的输入框矮，
+                                 看起来就往下坠、跟输入框不在一条中轴上（bill 反馈）。 -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="230"/>
+                                    <ColumnDefinition Width="14"/>
+                                    <ColumnDefinition Width="170"/>
+                                    <ColumnDefinition Width="14"/>
+                                    <ColumnDefinition Width="170"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="网络名称 *"
+                                           FontSize="12" Margin="0,0,0,5"
+                                           Foreground="{DynamicResource MutedBrush}"/>
+                                <Border Grid.Row="1" Grid.Column="0" Background="{DynamicResource CardBrush}"
+                                        CornerRadius="6" BorderBrush="{DynamicResource BorderBrush2}"
+                                        BorderThickness="1" Height="34">
+                                    <TextBox x:Name="TxtNetName" Style="{StaticResource ModernTextBox}"
+                                             BorderThickness="0" Background="Transparent"
+                                             VerticalContentAlignment="Center" Padding="10,0"
+                                             TextAlignment="Left"
+                                             ToolTip="例如 app-net、db-net"/>
+                                </Border>
+
+                                <TextBlock Grid.Row="0" Grid.Column="2" Text="网段 CIDR（可留空）"
+                                           FontSize="12" Margin="0,0,0,5"
+                                           Foreground="{DynamicResource MutedBrush}"/>
+                                <Border Grid.Row="1" Grid.Column="2" Background="{DynamicResource CardBrush}"
+                                        CornerRadius="6" BorderBrush="{DynamicResource BorderBrush2}"
+                                        BorderThickness="1" Height="34">
+                                    <TextBox x:Name="TxtNetSubnet" Style="{StaticResource ModernTextBox}"
+                                             BorderThickness="0" Background="Transparent"
+                                             VerticalContentAlignment="Center" Padding="10,0"
+                                             TextAlignment="Left"
+                                             ToolTip="例如 172.30.0.0/24；留空 = 由 wslc 自动分配"/>
+                                </Border>
+
+                                <TextBlock Grid.Row="0" Grid.Column="4" Text="网关（可留空）"
+                                           FontSize="12" Margin="0,0,0,5"
+                                           Foreground="{DynamicResource MutedBrush}"/>
+                                <Border Grid.Row="1" Grid.Column="4" Background="{DynamicResource CardBrush}"
+                                        CornerRadius="6" BorderBrush="{DynamicResource BorderBrush2}"
+                                        BorderThickness="1" Height="34">
+                                    <TextBox x:Name="TxtNetGateway" Style="{StaticResource ModernTextBox}"
+                                             BorderThickness="0" Background="Transparent"
+                                             VerticalContentAlignment="Center" Padding="10,0"
+                                             TextAlignment="Left"
+                                             ToolTip="例如 172.30.0.1；留空 = 取网段里第一个可用地址"/>
+                                </Border>
+
+                                <!-- 与输入框同一行、垂直居中；两个按钮之间留 10px（原来贴在一起，太挤） -->
+                                <StackPanel Grid.Row="1" Grid.Column="5" Orientation="Horizontal"
+                                            HorizontalAlignment="Left" VerticalAlignment="Center"
+                                            Margin="18,0,0,0">
+                                    <Button x:Name="BtnCreateNetwork" Style="{StaticResource PrimaryButton}"
+                                            Content="创建网络" Click="OnCreateNetworkClick"/>
+                                    <Button Style="{StaticResource ToolButton}" Margin="10,0,0,0"
+                                            Content="填入示例" Click="OnFillNetworkSampleClick"
+                                            ToolTip="填一个不与常见网段冲突的示例值"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock x:Name="TxtNetworkHint" FontSize="12" Margin="0,10,0,0"
+                                       TextWrapping="Wrap" LineHeight="19"
+                                       Foreground="{DynamicResource MutedBrush}"
+                                       Text="驱动固定为 bridge；容器创建时可在「新建容器 → 网络」里选择它。"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,12,0,0" Padding="14,12">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0" Margin="0,0,0,10">
+                                <TextBlock Text="网络列表" Style="{StaticResource SectionTitle}" Margin="0"/>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <TextBlock x:Name="TxtNetSummary" VerticalAlignment="Center" Margin="0,0,12,0"
+                                               FontSize="12.5" Foreground="{DynamicResource MutedBrush}"/>
+                                    <Button Style="{StaticResource ToolButton}" Content="刷新"
+                                            Click="OnRefreshNetworksClick"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Grid.Row="1">
+                                <DataGrid x:Name="GridNetworks" Style="{StaticResource ModernDataGrid}"
+                                          AutoGenerateColumns="False" IsReadOnly="True"
+                                          HeadersVisibility="Column" CanUserAddRows="False"
+                                          SelectionMode="Single" SelectionUnit="FullRow"
+                                          RowHeight="44"
+                                          CanUserSortColumns="False"
+                                          CanUserReorderColumns="False"
+                                          CanUserResizeColumns="False">
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="名称" Width="130" CanUserSort="False"
+                                                                CellStyle="{StaticResource CopyCell}">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Name}"
+                                                               VerticalAlignment="Center" FontSize="12.5"
+                                                               Foreground="{DynamicResource TextBrush}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               ToolTip="{Binding BasicTip}"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="驱动" Binding="{Binding DriverText}" Width="100"
+                                                            CanUserSort="False"/>
+                                        <!-- 网段：wslc 不校验网段，所以"能用不能用"得由列表指出来 ——
+                                             不可用时右侧挂一个 ⚠，悬停给原因。 -->
+                                        <DataGridTemplateColumn Header="网段" Width="140" CanUserSort="False">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding SubnetText}" FontSize="12.5"
+                                                                   Foreground="{DynamicResource SubTextBrush}"/>
+                                                        <TextBlock Text="&#xE7BA;" FontFamily="Segoe MDL2 Assets"
+                                                                   FontSize="11.5" Margin="6,0,0,0"
+                                                                   VerticalAlignment="Center"
+                                                                   Foreground="{DynamicResource ErrBrush}"
+                                                                   ToolTip="{Binding SubnetWarning}"
+                                                                   Visibility="{Binding HasSubnetWarning,
+                                                                               Converter={StaticResource BoolVisConv}}"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="网关" Binding="{Binding GatewayText}" Width="120"
+                                                            CanUserSort="False"/>
+                                        <!-- 关联容器：wslc network inspect 的 Containers 字段，
+                                             只有 inspect 才有（ls 不返回）—— 见 WslcService 顶部注释。 -->
+                                        <DataGridTemplateColumn Header="关联容器" Width="*" CanUserSort="False">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding ContainersText}"
+                                                                   FontSize="12.5"
+                                                                   Foreground="{DynamicResource SubTextBrush}"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   ToolTip="{Binding ContainersTip}"/>
+                                                        <TextBlock Text="{Binding CountText}" FontSize="11.5"
+                                                                   Margin="7,0,0,0" VerticalAlignment="Center"
+                                                                   Foreground="{DynamicResource MutedBrush}"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="创建时间" Binding="{Binding Created}" Width="140"
+                                                            CanUserSort="False"/>
+                                        <DataGridTemplateColumn Header="操作" Width="76" CanUserSort="False">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Button Style="{StaticResource RowDangerButton}" Content="删除"
+                                                            Margin="0"
+                                                            IsEnabled="{Binding CanRemove}"
+                                                            ToolTip="{Binding RemoveTip}"
+                                                            Click="OnNetworkRowRemoveClick"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <TextBlock Text="还没有读到网络"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="13"
+                                           Foreground="{DynamicResource MutedBrush}"
+                                           Visibility="{Binding Items.Count, ElementName=GridNetworks, Converter={StaticResource ZeroVisConv}}"/>
+                            </Grid>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,12,0,0" Padding="14,10"
+                            Visibility="{Binding Text, ElementName=TxtNetworkLog, Converter={StaticResource NonEmptyVisConv}}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="110"/>
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0" Margin="0,0,0,8">
+                                <TextBlock Text="执行日志" Style="{StaticResource SectionTitle}" Margin="0"/>
+                                <Button Style="{StaticResource ToolButton}" Margin="0,0,6,0"
+                                        HorizontalAlignment="Right"
+                                        Content="清空" Click="OnClearNetworkLogClick"/>
+                            </Grid>
+                            <TextBox x:Name="TxtNetworkLog" Grid.Row="1" IsReadOnly="True"
+                                     Background="{DynamicResource LogBgBrush}"
+                                     BorderBrush="{DynamicResource BorderSoftBrush}" BorderThickness="1"
+                                     Padding="12,10" FontFamily="Consolas, Microsoft YaHei UI" FontSize="12.5"
+                                     AcceptsReturn="True" TextWrapping="NoWrap"
+                                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                     Foreground="{DynamicResource TextBrush}"/>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- ⑤ 设置与加速 -->
+                <Grid x:Name="PanelSettings" Visibility="Collapsed">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <Border Style="{StaticResource Card}" Padding="18,16">
+                                <StackPanel>
+                                    <TextBlock Text="镜像下载加速" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock FontSize="12.5" TextWrapping="Wrap" Margin="0,0,0,10" LineHeight="19"
+                                               Foreground="{DynamicResource SubTextBrush}"
+                                               Text="拉取时优先走加速前缀，失败自动回退官方源；留空 = 直连官方源（不加速）。"/>
+
+                                    <TextBlock Text="加速前缀" FontSize="12.5" Margin="0,0,0,6"
+                                               Foreground="{DynamicResource SubTextBrush}"/>
+                                    <Border Background="{DynamicResource CardBrush}" CornerRadius="6"
+                                            BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                                            HorizontalAlignment="Left" Width="430" Height="34">
+                                        <TextBox x:Name="TxtMirror" Style="{StaticResource ModernTextBox}"
+                                                 BorderThickness="0" Background="Transparent"
+                                                 Padding="10,0" VerticalContentAlignment="Center"
+                                                 TextChanged="OnMirrorChanged"/>
+                                    </Border>
+
+                                    <!-- 预览紧跟输入框：改完立刻能看到实际拼出来的拉取命令 -->
+                                    <TextBlock x:Name="TxtMirrorPreview" FontSize="12" Margin="0,8,0,0"
+                                               TextWrapping="Wrap" LineHeight="19"
+                                               FontFamily="Consolas, Microsoft YaHei UI"
+                                               Foreground="{DynamicResource InfoBrush}"/>
+
+                                    <TextBlock Text="常用镜像源（点击填入）" FontSize="12.5" Margin="0,14,0,6"
+                                               Foreground="{DynamicResource SubTextBrush}"/>
+                                    <ItemsControl x:Name="ListMirrors">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Style="{StaticResource ToolButton}" Margin="0,0,8,8"
+                                                        Content="{Binding}" Click="OnMirrorPresetClick"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <!-- 免责声明：预设里是**第三方公开**加速站，工具只提供地址、不运营也不背书。
+                                         这类站点随时可能限流/变更/失效，风险提示必须常驻，不能只写在 README 里。 -->
+                                    <TextBlock x:Name="TxtMirrorPresetHint"
+                                               FontSize="12" Margin="0,0,0,2" TextWrapping="Wrap" LineHeight="19"
+                                               Foreground="{DynamicResource MutedBrush}"
+                                               Text="⚠ 以上为第三方公开镜像站，与本工具作者无关：不保证可用性与速度，随时可能限流或失效，请自行判断后使用（可在 settings.ini 改 MirrorPresets=，写 none 即不使用）。"/>
+
+                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                        <Button Style="{StaticResource ToolButton}" Content="检测加速地址可用性"
+                                                ToolTip="检测方式是**真的拉取一次 alpine:latest**（比能不能打开首页可靠）；测完该镜像会留在本地镜像列表里，不需要可到镜像页删除"
+                                                Click="OnTestMirrorsClick"/>
+                                        <Button Style="{StaticResource ToolButton}" Margin="0"
+                                                Content="打开 wslc 设置文件" Click="OnOpenWslcSettingsClick"/>
+                                        <Button Style="{StaticResource ToolButton}" Margin="8,0,0,0"
+                                                Content="压缩虚拟磁盘" x:Name="BtnCompact"
+                                                ToolTip="对 wslc 会话的 storage.vhdx 执行 diskpart compact。⚠ 实测对 wslc 会话通常回收 0 字节（ext4 删除不清零，TRIM 不传导），仅对确有零块的磁盘有效。会关闭 WSL 并弹 UAC。"
+                                                Click="OnCompactDiskClick"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TxtMirrorTest" FontSize="12" Margin="0,8,0,0"
+                                               TextWrapping="Wrap" LineHeight="19"
+                                               Foreground="{DynamicResource SubTextBrush}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- 镜像索引：wslc 没有 search 子命令，检索靠本地索引，索引必须能更新 -->
+                            <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="18,16">
+                                <StackPanel>
+                                    <TextBlock Text="镜像索引" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock FontSize="12.5" TextWrapping="Wrap" Margin="0,0,0,10" LineHeight="19"
+                                               Foreground="{DynamicResource SubTextBrush}"
+                                               Text="wslc 没有官方 search 子命令，检索用的是本机索引；可导出模板补录后再导入。"/>
+                                    <!-- 索引文件路径也要能一键复制（路径是拿去粘到资源管理器里的） -->
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" x:Name="TxtIndexInfo" FontSize="12.5"
+                                                   TextWrapping="Wrap" LineHeight="19"
+                                                   Foreground="{DynamicResource InfoBrush}"/>
+                                        <Button Grid.Column="1" Style="{StaticResource RowButton}" Margin="8,0,0,0"
+                                                VerticalAlignment="Top" Content="复制"
+                                                ToolTip="复制索引文件路径"
+                                                Click="OnCopyIndexPathClick"/>
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Style="{StaticResource ToolButton}" Content="导出当前索引…"
+                                                Click="OnExportIndexClick"/>
+                                        <Button Style="{StaticResource ToolButton}" Content="从文件导入…"
+                                                Click="OnImportIndexClick"/>
+                                        <Button Style="{StaticResource ToolButton}" Margin="0" Content="恢复内置索引"
+                                                Click="OnResetIndexClick"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TxtIndexMsg" FontSize="12" Margin="0,8,0,0"
+                                               TextWrapping="Wrap" LineHeight="19"
+                                               Foreground="{DynamicResource SubTextBrush}"/>
+                                </StackPanel>
+                            </Border>
+
+
+                            <!-- 开机自启：注册表 HKCU\...\Run + 上次运行中的容器名单快照 -->
+                            <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="18,16">
+                                <StackPanel>
+                                    <TextBlock Text="启动与自启" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock FontSize="12.5" TextWrapping="Wrap" Margin="0,0,0,12" LineHeight="19"
+                                               Foreground="{DynamicResource SubTextBrush}"
+                                               Text="开启后，登录 Windows 时自动启动本工具，先预热 wslc 会话，再按「上次处于运行中」的名单把容器逐个启动。名单在每次刷新容器列表、退出程序以及系统关机时更新。"/>
+
+                                    <CheckBox x:Name="ChkAutoStart" Style="{StaticResource ModernCheckBox}"
+                                              Content="开机自动启动（并恢复上次运行中的容器）"
+                                              Checked="OnAutoStartToggled" Unchecked="OnAutoStartToggled"/>
+                                    <CheckBox x:Name="ChkAutoStartMin" Style="{StaticResource ModernCheckBox}"
+                                              Content="自启时最小化到托盘，不弹出窗口"
+                                              Margin="0,10,0,0"
+                                              ToolTip="只影响开机自启那一次；平时双击图标照常显示窗口"/>
+
+                                    <TextBlock x:Name="TxtAutoStartState" FontSize="12" Margin="0,10,0,0"
+                                               TextWrapping="Wrap" LineHeight="19"
+                                               FontFamily="Consolas, Microsoft YaHei UI"
+                                               Foreground="{DynamicResource InfoBrush}"/>
+
+                                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                        <Button Style="{StaticResource ToolButton}" Content="立即试跑一次恢复"
+                                                ToolTip="不重启电脑，现在就按名单拉起一遍容器，用来验证配置是否正确"
+                                                Click="OnTryAutoStartNowClick"/>
+                                        <Button Style="{StaticResource ToolButton}" Margin="0"
+                                                Content="打开名单文件所在目录" Click="OnOpenConfigDirClick"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="18,16">
+                                <StackPanel>
+                                    <TextBlock Text="应用" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock FontSize="12.5" TextWrapping="Wrap" Margin="0,0,0,12" LineHeight="19"
+                                               Foreground="{DynamicResource SubTextBrush}"
+                                               Text="关闭主窗口 = 最小化到托盘，从托盘菜单退出。"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Style="{StaticResource PrimaryButton}" Content="保存设置"
+                                                Click="OnSaveSettingsClick"/>
+                                        <Button Style="{StaticResource ToolButton}" Margin="10,0,0,0"
+                                                Content="重启应用" Click="OnRestartAppClick"/>
+                                        <Button Style="{StaticResource ToolButton}" Margin="0"
+                                                Content="打开配置目录" Click="OnOpenConfigDirClick"/>
+                                    </StackPanel>
+                                    <Grid Margin="0,12,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" x:Name="TxtConfigPath" FontSize="12"
+                                                   Foreground="{DynamicResource MutedBrush}"
+                                                   TextWrapping="Wrap"/>
+                                        <Button Grid.Column="1" Style="{StaticResource RowButton}" Margin="8,0,0,0"
+                                                VerticalAlignment="Top" Content="复制"
+                                                ToolTip="复制配置文件路径"
+                                                Click="OnCopyConfigPathClick"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="18,16">
+                                <StackPanel>
+                                    <TextBlock Text="关于" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock x:Name="TxtAbout" FontSize="13" TextWrapping="Wrap" LineHeight="21"
+                                               Foreground="{DynamicResource SubTextBrush}"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+
+                <Grid x:Name="PanelBackup" Visibility="Collapsed">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+
+                            <Border Style="{StaticResource Card}" Padding="18,16">
+                                <StackPanel>
+                                    <TextBlock Text="备份容器" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock FontSize="12.5" TextWrapping="Wrap" Margin="0,0,0,12" LineHeight="19"
+                                               Foreground="{DynamicResource SubTextBrush}"
+                                               Text="把容器导出为 tar 存档 + 配置元数据（wslc container export + inspect）。恢复时会按原配置（名称/启动命令/端口/环境变量）自动重建容器。⚠ wslc 要求导出时容器必须停止 —— 工具会自动处理：先停止，导出完成后恢复运行。"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox x:Name="CmbBackupContainer" Style="{StaticResource ModernComboBox}"
+                                                  Height="34" VerticalContentAlignment="Center"/>
+                                        <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Margin="10,0,0,0"
+                                                Content="备份到…" Click="OnBackupExportClick"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource Card}" Padding="18,16" Margin="0,12,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="恢复容器" Style="{StaticResource SectionTitle}"/>
+                                    <TextBlock FontSize="12.5" TextWrapping="Wrap" Margin="0,0,0,12" LineHeight="19"
+                                               Foreground="{DynamicResource SubTextBrush}"
+                                               Text="选择备份 tar 并点「导入」：工具会读取随附的配置元数据，导入镜像后**自动按原配置重建容器**（名称/启动命令/端口/环境变量）。没有元数据的旧备份则只恢复为镜像。"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="TxtRestoreFile" Style="{StaticResource ModernTextBox}"
+                                                 Height="34" VerticalContentAlignment="Center" Padding="10,0"
+                                                 IsReadOnly="True"
+                                                 ToolTip="通过「选择备份…」挑选 tar 文件"/>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="10,0,0,0">
+                                            <Button Style="{StaticResource ToolButton}" Content="选择备份…"
+                                                    Click="OnRestoreBrowseClick"/>
+                                            <Button Style="{StaticResource PrimaryButton}" Margin="8,0,0,0"
+                                                    Content="导入" Click="OnRestoreImportClick"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource Card}" Padding="18,16" Margin="0,12,0,0"
+                                    BorderBrush="{DynamicResource ErrBrush}" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Text="清理：重建会话" Style="{StaticResource SectionTitle}"
+                                               Foreground="{DynamicResource ErrBrush}"/>
+                                    <TextBlock FontSize="12.5" TextWrapping="Wrap" Margin="0,0,0,12" LineHeight="19"
+                                               Foreground="{DynamicResource SubTextBrush}"
+                                               Text="终止 wslc 会话并删除其虚拟磁盘（storage.vhdx），下次使用时自动重建一个全新的空会话。⚠ 这会清空该会话下的**全部容器与镜像**，且虚拟磁盘内的数据不可恢复 —— 如需保留请先「备份容器」。"/>
+                                    <!-- 会话虚拟磁盘路径：这一行是「路径 + 占用」的复合文本，
+                                         复制按钮单独存原始路径（_sessionDiskPath），不复制说明文字。 -->
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" x:Name="TxtSessionDisk" FontSize="12"
+                                                   TextWrapping="Wrap" LineHeight="19"
+                                                   FontFamily="Consolas, Microsoft YaHei UI"
+                                                   Foreground="{DynamicResource InfoBrush}"/>
+                                        <Button Grid.Column="1" Style="{StaticResource RowButton}" Margin="8,0,0,0"
+                                                VerticalAlignment="Top" Content="复制"
+                                                ToolTip="复制会话虚拟磁盘路径"
+                                                Click="OnCopySessionDiskClick"/>
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Style="{StaticResource RowDangerButton}" Padding="14,7"
+                                                Content="重建会话（清空所有容器与镜像）" Click="OnRebuildSessionClick"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+
+            </Grid>
+        </Grid>
+
+        <!-- 状态（右下角，无分隔线） -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Margin="0,6,20,10">
+            <TextBlock x:Name="TxtBusy" VerticalAlignment="Center" FontSize="12.5" Margin="0,0,14,0"
+                       Foreground="{DynamicResource AccentBrush}" Visibility="Collapsed"/>
+            <Ellipse x:Name="ElpStatus" Style="{StaticResource Dot}"/>
+            <TextBlock x:Name="TxtStatus" Margin="8,0,0,0" FontSize="12.5"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource SubTextBrush}"/>
+        </StackPanel>
+    </Grid>
+    </Border>
+</UserControl>

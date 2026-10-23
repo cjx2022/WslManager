@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <AssemblyName>WslManager</AssemblyName>
     <OutputType>WinExe</OutputType>
@@ -11,12 +11,17 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <AssemblyVersion>1.1.0.0</AssemblyVersion>
-    <FileVersion>1.1.0.0</FileVersion>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+    <FileVersion>2.0.0.0</FileVersion>
     <Company>BillChen</Company>
     <Product>WSL Manager</Product>
   </PropertyGroup>
   <ItemGroup>
+    <!-- _probe/ 下是独立的验收探针（自己的 csproj + obj），不参与主程序编译；
+         否则 SDK 的默认通配会把探针 obj 里生成的 AssemblyInfo 也吃进来，报 CS0579 特性重复 -->
+    <Compile Remove="_probe\**" />
+    <None Remove="_probe\**" />
+    <Page Remove="_probe\**" />
     <ApplicationDefinition Remove="WslManager.WslManager\App.xaml" />
     <ApplicationDefinition Include="WslManager.WslManager\App.xaml" Generator="MSBuild:Compile" SubType="Designer" LogicalName="app.xaml" />
     <Page Remove="themes\controls.xaml" />
@@ -25,7 +30,6 @@
     <Page Remove="WslManager.WslManager\MainWindow.xaml" />
     <Page Remove="WslManager.WslManager\InstallWindow.xaml" />
     <Page Remove="WslManager.WslManager\UninstallWindow.xaml" />
-    <Page Remove="WslManager.WslManager\EnvCheckWindow.xaml" />
     <Page Remove="WslManager.WslManager\DownloadsWindow.xaml" />
     <Page Include="themes\controls.xaml" Generator="MSBuild:Compile" SubType="Designer" LogicalName="themes/controls.xaml" />
     <Page Include="themes\dark.xaml" Generator="MSBuild:Compile" SubType="Designer" LogicalName="themes/dark.xaml" />
@@ -33,8 +37,14 @@
     <Page Include="WslManager.WslManager\MainWindow.xaml" Generator="MSBuild:Compile" SubType="Designer" LogicalName="mainwindow.xaml" />
     <Page Include="WslManager.WslManager\InstallWindow.xaml" Generator="MSBuild:Compile" SubType="Designer" LogicalName="installwindow.xaml" />
     <Page Include="WslManager.WslManager\UninstallWindow.xaml" Generator="MSBuild:Compile" SubType="Designer" LogicalName="uninstallwindow.xaml" />
-    <Page Include="WslManager.WslManager\EnvCheckWindow.xaml" Generator="MSBuild:Compile" SubType="Designer" LogicalName="envcheckwindow.xaml" />
     <Page Include="WslManager.WslManager\DownloadsWindow.xaml" Generator="MSBuild:Compile" SubType="Designer" LogicalName="downloadswindow.xaml" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 微软发行版清单快照：编译进 exe，保证无网络也能列出全部官方发行版 -->
+    <EmbeddedResource Include="WslManager.Install\official-manifest.snapshot.json" LogicalName="official-manifest.snapshot.json" />
+    <!-- 正式 logo（bill 的几何企鹅，白底转透明、裁边后 1088x1088）。
+         用 EmbeddedResource + LogicalName，AppIcon 按 WslManager.Assets.logo.png 读流。 -->
+    <EmbeddedResource Include="Assets\logo.png" LogicalName="WslManager.Assets.logo.png" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
