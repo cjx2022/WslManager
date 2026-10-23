@@ -156,7 +156,7 @@ WslManager.exe --shot=<目录>          :: 离屏自检：屏幕外逐页渲染�
 
 ## 运行
 
-在 [Releases](https://github.com/cjx2022/WslManager/releases) 下载 `WslManager.exe`（单文件，约 0.8 MB）双击即可运行。
+在 [Releases](https://github.com/cjx2022/WslManager/releases) 下载 `WslManager.exe`（单文件，v2.0 约 1.8 MB）双击即可运行。v1.x 只有发行版管理、体积约 0.8 MB，仍可从 [v1.1](https://github.com/cjx2022/WslManager/releases/tag/v1.1) 下载。
 
 依赖：Windows 10/11 + [.NET 8 桌面运行时](https://dotnet.microsoft.com/download/dotnet/8.0)
 
@@ -168,7 +168,7 @@ WslManager.exe --shot=<目录>          :: 离屏自检：屏幕外逐页渲染�
 dotnet publish WslManager.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:PublishSelfContained=false -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 ```
 
-发布产物为 `publish\WslManager.exe`（框架依赖单文件，约 0.8 MB）。图标为仓库根目录 `app.ico`。
+发布产物为 `publish\WslManager.exe`（框架依赖单文件，v2.0 约 1.8 MB）。图标为仓库根目录 `app.ico`。
 
 > **注意**：`--self-contained false` 在 .NET 10 SDK 上会被 `PublishSingleFile` 覆盖（该属性在 `dotnet publish` 期间隐含 `SelfContained=true`），
 > 导致产物体积从 0.8 MB 膨胀到 68 MB。必须改用 `-p:PublishSelfContained=false` 才能得到框架依赖的瘦单文件。
